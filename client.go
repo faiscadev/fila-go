@@ -42,11 +42,22 @@ func WithGRPCDialOption(opt grpc.DialOption) DialOption {
 	}
 }
 
+// WithTLS enables TLS using the operating system's default root CA pool.
+//
+// Use this when the Fila server's certificate is issued by a public CA
+// (e.g., Let's Encrypt) or a corporate CA already installed in the
+// system trust store. No CA certificate file is needed.
+func WithTLS() DialOption {
+	return func(o *dialOptions) {
+		o.hasTLS = true
+	}
+}
+
 // WithTLSCACert configures TLS with a CA certificate for verifying the server.
 //
 // The caCertPEM should be a PEM-encoded CA certificate. When set, the
-// connection uses TLS instead of plaintext. Required for connecting to
-// a TLS-enabled broker.
+// connection uses TLS instead of plaintext. Use this when the server's
+// CA is not in the system trust store (e.g., self-signed certificates).
 func WithTLSCACert(caCertPEM []byte) DialOption {
 	return func(o *dialOptions) {
 		o.caCertPEM = caCertPEM
@@ -57,8 +68,8 @@ func WithTLSCACert(caCertPEM []byte) DialOption {
 // WithTLSClientCert configures mTLS with a client certificate and key.
 //
 // Both certPEM and keyPEM should be PEM-encoded. This option must be
-// used together with WithTLSCACert. When set, the client presents its
-// certificate to the server for mutual TLS authentication.
+// used together with WithTLS or WithTLSCACert. When set, the client
+// presents its certificate to the server for mutual TLS authentication.
 func WithTLSClientCert(certPEM, keyPEM []byte) DialOption {
 	return func(o *dialOptions) {
 		o.clientCert = certPEM
@@ -106,9 +117,9 @@ func Dial(addr string, opts ...DialOption) (*Client, error) {
 		opt(&do)
 	}
 
-	// Validate: WithTLSClientCert requires WithTLSCACert.
+	// Validate: WithTLSClientCert requires WithTLS or WithTLSCACert.
 	if !do.hasTLS && (do.clientCert != nil || do.clientKey != nil) {
-		return nil, errors.New("WithTLSClientCert requires WithTLSCACert: client certificate has no effect without TLS")
+		return nil, errors.New("WithTLSClientCert requires WithTLS or WithTLSCACert: client certificate has no effect without TLS")
 	}
 
 	var grpcOpts []grpc.DialOption
@@ -149,15 +160,18 @@ func (c *Client) Close() error {
 }
 
 // buildTLSConfig creates a *tls.Config from PEM-encoded certificates.
+// When caCertPEM is nil, the system's default root CA pool is used.
 func buildTLSConfig(caCertPEM, clientCertPEM, clientKeyPEM []byte) (*tls.Config, error) {
-	certPool := x509.NewCertPool()
-	if !certPool.AppendCertsFromPEM(caCertPEM) {
-		return nil, errors.New("failed to parse CA certificate")
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
 	}
 
-	tlsConfig := &tls.Config{
-		RootCAs:    certPool,
-		MinVersion: tls.VersionTLS12,
+	if caCertPEM != nil {
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caCertPEM) {
+			return nil, errors.New("failed to parse CA certificate")
+		}
+		tlsConfig.RootCAs = certPool
 	}
 
 	// Reject partial mTLS config: both cert and key must be provided or neither.

@@ -416,6 +416,48 @@ func buildTestTLSConfig(caCertPEM, clientCertPEM, clientKeyPEM []byte) (*tls.Con
 	return cfg, nil
 }
 
+func TestWithTLSSystemTrustStore(t *testing.T) {
+	// Unit test: verify that WithTLS() creates a valid TLS configuration
+	// using the system trust store (RootCAs is nil, meaning Go uses the
+	// system default). No server needed for config validation.
+
+	// WithTLS() alone should succeed.
+	client, err := fila.Dial("localhost:5555", fila.WithTLS())
+	if err != nil {
+		t.Fatalf("Dial with WithTLS() failed: %v", err)
+	}
+	client.Close()
+
+	// WithTLS() + WithAPIKey() should succeed (API key requires transport security).
+	client, err = fila.Dial("localhost:5555", fila.WithTLS(), fila.WithAPIKey("test-key"))
+	if err != nil {
+		t.Fatalf("Dial with WithTLS() + WithAPIKey() failed: %v", err)
+	}
+	client.Close()
+
+	// WithTLSClientCert without WithTLS or WithTLSCACert should fail.
+	_, err = fila.Dial("localhost:5555", fila.WithTLSClientCert([]byte("cert"), []byte("key")))
+	if err == nil {
+		t.Fatal("expected error when using WithTLSClientCert without TLS, got nil")
+	}
+
+	// WithTLS() + WithTLSClientCert should succeed (mTLS with system trust store).
+	// Use real PEM-encoded cert/key pair so tls.X509KeyPair succeeds.
+	caCert, _, _, clientCert, clientKey := generateTestCerts(t)
+	client, err = fila.Dial("localhost:5555", fila.WithTLS(), fila.WithTLSClientCert(clientCert, clientKey))
+	if err != nil {
+		t.Fatalf("Dial with WithTLS() + WithTLSClientCert() failed: %v", err)
+	}
+	client.Close()
+
+	// WithTLSCACert should still work as before (custom CA).
+	client, err = fila.Dial("localhost:5555", fila.WithTLSCACert(caCert))
+	if err != nil {
+		t.Fatalf("Dial with WithTLSCACert() failed: %v", err)
+	}
+	client.Close()
+}
+
 func TestTLSConnection(t *testing.T) {
 	caCert, serverCert, serverKey, clientCert, clientKey := generateTestCerts(t)
 

@@ -59,7 +59,17 @@ func main() {
 
 ## TLS
 
-Connect to a TLS-enabled broker by providing the CA certificate:
+If the broker's certificate is issued by a public CA (e.g., Let's Encrypt) or a
+CA already in the operating system's trust store, enable TLS with no arguments:
+
+```go
+client, err := fila.Dial("broker.example.com:5555",
+    fila.WithTLS(),
+)
+```
+
+For self-signed certificates or private CAs not in the system trust store,
+provide the CA certificate explicitly:
 
 ```go
 caCert, err := os.ReadFile("ca.crt")
@@ -121,8 +131,9 @@ Connect to a Fila broker. Connection is established lazily on the first RPC call
 
 ### Options
 
-- `fila.WithTLSCACert(caCertPEM []byte)` — CA certificate for verifying the server (enables TLS)
-- `fila.WithTLSClientCert(certPEM, keyPEM []byte)` — Client certificate and key for mTLS
+- `fila.WithTLS()` — Enable TLS using the system's default root CA pool
+- `fila.WithTLSCACert(caCertPEM []byte)` — Enable TLS with a custom CA certificate for verifying the server
+- `fila.WithTLSClientCert(certPEM, keyPEM []byte)` — Client certificate and key for mTLS (requires `WithTLS` or `WithTLSCACert`)
 - `fila.WithAPIKey(key string)` — API key sent as `Bearer` token on every RPC
 - `fila.WithGRPCDialOption(opt grpc.DialOption)` — Raw gRPC dial option for advanced configuration
 
