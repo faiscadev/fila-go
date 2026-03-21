@@ -57,11 +57,85 @@ func main() {
 }
 ```
 
+## TLS
+
+If the broker's certificate is issued by a public CA (e.g., Let's Encrypt) or a
+CA already in the operating system's trust store, enable TLS with no arguments:
+
+```go
+client, err := fila.Dial("broker.example.com:5555",
+    fila.WithTLS(),
+)
+```
+
+For self-signed certificates or private CAs not in the system trust store,
+provide the CA certificate explicitly:
+
+```go
+caCert, err := os.ReadFile("ca.crt")
+if err != nil {
+    log.Fatal(err)
+}
+client, err := fila.Dial("localhost:5555",
+    fila.WithTLSCACert(caCert),
+)
+```
+
+For mutual TLS (mTLS), also provide the client certificate and key:
+
+```go
+caCert, err := os.ReadFile("ca.crt")
+if err != nil {
+    log.Fatal(err)
+}
+clientCert, err := os.ReadFile("client.crt")
+if err != nil {
+    log.Fatal(err)
+}
+clientKey, err := os.ReadFile("client.key")
+if err != nil {
+    log.Fatal(err)
+}
+
+client, err := fila.Dial("localhost:5555",
+    fila.WithTLSCACert(caCert),
+    fila.WithTLSClientCert(clientCert, clientKey),
+)
+```
+
+## API Key Authentication
+
+Connect to an auth-enabled broker by providing an API key:
+
+```go
+client, err := fila.Dial("localhost:5555",
+    fila.WithAPIKey("your-api-key"),
+)
+```
+
+TLS and API key auth can be combined:
+
+```go
+client, err := fila.Dial("localhost:5555",
+    fila.WithTLSCACert(caCert),
+    fila.WithTLSClientCert(clientCert, clientKey),
+    fila.WithAPIKey("your-api-key"),
+)
+```
+
 ## API
 
 ### `fila.Dial(addr string, opts ...DialOption) (*Client, error)`
 
 Connect to a Fila broker. Connection is established lazily on the first RPC call.
+
+### Options
+
+- `fila.WithTLS()` — Enable TLS using the system's default root CA pool
+- `fila.WithTLSCACert(caCertPEM []byte)` — Enable TLS with a custom CA certificate for verifying the server
+- `fila.WithTLSClientCert(certPEM, keyPEM []byte)` — Client certificate and key for mTLS (requires `WithTLS` or `WithTLSCACert`)
+- `fila.WithAPIKey(key string)` — API key sent as `Bearer` token on every RPC
+- `fila.WithGRPCDialOption(opt grpc.DialOption)` — Raw gRPC dial option for advanced configuration
 
 ### `client.Enqueue(ctx, queue, headers, payload) (string, error)`
 

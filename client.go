@@ -1,8 +1,15 @@
 package fila
 
 import (
+	"context"
+	"crypto/tls"
+	"crypto/x509"
+	"errors"
+	"fmt"
+
 	filav1 "github.com/faisca/fila-go/filav1"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 )
 
@@ -19,7 +26,13 @@ type Client struct {
 type DialOption func(*dialOptions)
 
 type dialOptions struct {
-	grpcOpts []grpc.DialOption
+	grpcOpts    []grpc.DialOption
+	caCertPEM   []byte
+	clientCert  []byte
+	clientKey   []byte
+	apiKey      string
+	hasTLS      bool
+	hasAPIKey   bool
 }
 
 // WithGRPCDialOption adds a raw gRPC dial option for advanced configuration.
@@ -27,6 +40,70 @@ func WithGRPCDialOption(opt grpc.DialOption) DialOption {
 	return func(o *dialOptions) {
 		o.grpcOpts = append(o.grpcOpts, opt)
 	}
+}
+
+// WithTLS enables TLS using the operating system's default root CA pool.
+//
+// Use this when the Fila server's certificate is issued by a public CA
+// (e.g., Let's Encrypt) or a corporate CA already installed in the
+// system trust store. No CA certificate file is needed.
+func WithTLS() DialOption {
+	return func(o *dialOptions) {
+		o.hasTLS = true
+	}
+}
+
+// WithTLSCACert configures TLS with a CA certificate for verifying the server.
+//
+// The caCertPEM should be a PEM-encoded CA certificate. When set, the
+// connection uses TLS instead of plaintext. Use this when the server's
+// CA is not in the system trust store (e.g., self-signed certificates).
+func WithTLSCACert(caCertPEM []byte) DialOption {
+	return func(o *dialOptions) {
+		o.caCertPEM = caCertPEM
+		o.hasTLS = true
+	}
+}
+
+// WithTLSClientCert configures mTLS with a client certificate and key.
+//
+// Both certPEM and keyPEM should be PEM-encoded. This option must be
+// used together with WithTLS or WithTLSCACert. When set, the client
+// presents its certificate to the server for mutual TLS authentication.
+func WithTLSClientCert(certPEM, keyPEM []byte) DialOption {
+	return func(o *dialOptions) {
+		o.clientCert = certPEM
+		o.clientKey = keyPEM
+	}
+}
+
+// WithAPIKey configures API key authentication.
+//
+// When set, every outgoing RPC includes an "authorization: Bearer <key>"
+// metadata header. The server validates this key and applies per-key ACLs.
+func WithAPIKey(key string) DialOption {
+	return func(o *dialOptions) {
+		o.apiKey = key
+		o.hasAPIKey = true
+	}
+}
+
+// apiKeyCredentials implements grpc.PerRPCCredentials to attach an API key
+// as a Bearer token on every outgoing RPC.
+type apiKeyCredentials struct {
+	key string
+	// requireTransportSecurity is true when TLS is configured.
+	requireTransportSecurity bool
+}
+
+func (c *apiKeyCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
+	return map[string]string{
+		"authorization": "Bearer " + c.key,
+	}, nil
+}
+
+func (c *apiKeyCredentials) RequireTransportSecurity() bool {
+	return c.requireTransportSecurity
 }
 
 // Dial connects to a Fila broker at the given address.
@@ -40,9 +117,30 @@ func Dial(addr string, opts ...DialOption) (*Client, error) {
 		opt(&do)
 	}
 
-	grpcOpts := []grpc.DialOption{
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	// Validate: WithTLSClientCert requires WithTLS or WithTLSCACert.
+	if !do.hasTLS && (do.clientCert != nil || do.clientKey != nil) {
+		return nil, errors.New("WithTLSClientCert requires WithTLS or WithTLSCACert: client certificate has no effect without TLS")
 	}
+
+	var grpcOpts []grpc.DialOption
+
+	if do.hasTLS {
+		tlsConfig, err := buildTLSConfig(do.caCertPEM, do.clientCert, do.clientKey)
+		if err != nil {
+			return nil, fmt.Errorf("tls config: %w", err)
+		}
+		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
+	} else {
+		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	}
+
+	if do.hasAPIKey {
+		grpcOpts = append(grpcOpts, grpc.WithPerRPCCredentials(&apiKeyCredentials{
+			key:                      do.apiKey,
+			requireTransportSecurity: do.hasTLS,
+		}))
+	}
+
 	grpcOpts = append(grpcOpts, do.grpcOpts...)
 
 	conn, err := grpc.NewClient(addr, grpcOpts...)
@@ -59,4 +157,35 @@ func Dial(addr string, opts ...DialOption) (*Client, error) {
 // Close closes the underlying gRPC connection.
 func (c *Client) Close() error {
 	return c.conn.Close()
+}
+
+// buildTLSConfig creates a *tls.Config from PEM-encoded certificates.
+// When caCertPEM is nil, the system's default root CA pool is used.
+func buildTLSConfig(caCertPEM, clientCertPEM, clientKeyPEM []byte) (*tls.Config, error) {
+	tlsConfig := &tls.Config{
+		MinVersion: tls.VersionTLS12,
+	}
+
+	if caCertPEM != nil {
+		certPool := x509.NewCertPool()
+		if !certPool.AppendCertsFromPEM(caCertPEM) {
+			return nil, errors.New("failed to parse CA certificate")
+		}
+		tlsConfig.RootCAs = certPool
+	}
+
+	// Reject partial mTLS config: both cert and key must be provided or neither.
+	if (clientCertPEM != nil) != (clientKeyPEM != nil) {
+		return nil, errors.New("both client certificate and key must be provided for mTLS")
+	}
+
+	if clientCertPEM != nil && clientKeyPEM != nil {
+		cert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse client certificate: %w", err)
+		}
+		tlsConfig.Certificates = []tls.Certificate{cert}
+	}
+
+	return tlsConfig, nil
 }
