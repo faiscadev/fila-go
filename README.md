@@ -57,11 +57,62 @@ func main() {
 }
 ```
 
+## TLS
+
+Connect to a TLS-enabled broker by providing the CA certificate:
+
+```go
+caCert, _ := os.ReadFile("ca.crt")
+client, err := fila.Dial("localhost:5555",
+    fila.WithTLSCACert(caCert),
+)
+```
+
+For mutual TLS (mTLS), also provide the client certificate and key:
+
+```go
+caCert, _ := os.ReadFile("ca.crt")
+clientCert, _ := os.ReadFile("client.crt")
+clientKey, _ := os.ReadFile("client.key")
+
+client, err := fila.Dial("localhost:5555",
+    fila.WithTLSCACert(caCert),
+    fila.WithTLSClientCert(clientCert, clientKey),
+)
+```
+
+## API Key Authentication
+
+Connect to an auth-enabled broker by providing an API key:
+
+```go
+client, err := fila.Dial("localhost:5555",
+    fila.WithAPIKey("your-api-key"),
+)
+```
+
+TLS and API key auth can be combined:
+
+```go
+client, err := fila.Dial("localhost:5555",
+    fila.WithTLSCACert(caCert),
+    fila.WithTLSClientCert(clientCert, clientKey),
+    fila.WithAPIKey("your-api-key"),
+)
+```
+
 ## API
 
 ### `fila.Dial(addr string, opts ...DialOption) (*Client, error)`
 
 Connect to a Fila broker. Connection is established lazily on the first RPC call.
+
+### Options
+
+- `fila.WithTLSCACert(caCertPEM []byte)` — CA certificate for verifying the server (enables TLS)
+- `fila.WithTLSClientCert(certPEM, keyPEM []byte)` — Client certificate and key for mTLS
+- `fila.WithAPIKey(key string)` — API key sent as `Bearer` token on every RPC
+- `fila.WithGRPCDialOption(opt grpc.DialOption)` — Raw gRPC dial option for advanced configuration
 
 ### `client.Enqueue(ctx, queue, headers, payload) (string, error)`
 

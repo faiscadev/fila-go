@@ -19,14 +19,19 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	FilaAdmin_CreateQueue_FullMethodName = "/fila.v1.FilaAdmin/CreateQueue"
-	FilaAdmin_DeleteQueue_FullMethodName = "/fila.v1.FilaAdmin/DeleteQueue"
-	FilaAdmin_SetConfig_FullMethodName   = "/fila.v1.FilaAdmin/SetConfig"
-	FilaAdmin_GetConfig_FullMethodName   = "/fila.v1.FilaAdmin/GetConfig"
-	FilaAdmin_ListConfig_FullMethodName  = "/fila.v1.FilaAdmin/ListConfig"
-	FilaAdmin_GetStats_FullMethodName    = "/fila.v1.FilaAdmin/GetStats"
-	FilaAdmin_Redrive_FullMethodName     = "/fila.v1.FilaAdmin/Redrive"
-	FilaAdmin_ListQueues_FullMethodName  = "/fila.v1.FilaAdmin/ListQueues"
+	FilaAdmin_CreateQueue_FullMethodName  = "/fila.v1.FilaAdmin/CreateQueue"
+	FilaAdmin_DeleteQueue_FullMethodName  = "/fila.v1.FilaAdmin/DeleteQueue"
+	FilaAdmin_SetConfig_FullMethodName    = "/fila.v1.FilaAdmin/SetConfig"
+	FilaAdmin_GetConfig_FullMethodName    = "/fila.v1.FilaAdmin/GetConfig"
+	FilaAdmin_ListConfig_FullMethodName   = "/fila.v1.FilaAdmin/ListConfig"
+	FilaAdmin_GetStats_FullMethodName     = "/fila.v1.FilaAdmin/GetStats"
+	FilaAdmin_Redrive_FullMethodName      = "/fila.v1.FilaAdmin/Redrive"
+	FilaAdmin_ListQueues_FullMethodName   = "/fila.v1.FilaAdmin/ListQueues"
+	FilaAdmin_CreateApiKey_FullMethodName = "/fila.v1.FilaAdmin/CreateApiKey"
+	FilaAdmin_RevokeApiKey_FullMethodName = "/fila.v1.FilaAdmin/RevokeApiKey"
+	FilaAdmin_ListApiKeys_FullMethodName  = "/fila.v1.FilaAdmin/ListApiKeys"
+	FilaAdmin_SetAcl_FullMethodName       = "/fila.v1.FilaAdmin/SetAcl"
+	FilaAdmin_GetAcl_FullMethodName       = "/fila.v1.FilaAdmin/GetAcl"
 )
 
 // FilaAdminClient is the client API for FilaAdmin service.
@@ -43,6 +48,13 @@ type FilaAdminClient interface {
 	GetStats(ctx context.Context, in *GetStatsRequest, opts ...grpc.CallOption) (*GetStatsResponse, error)
 	Redrive(ctx context.Context, in *RedriveRequest, opts ...grpc.CallOption) (*RedriveResponse, error)
 	ListQueues(ctx context.Context, in *ListQueuesRequest, opts ...grpc.CallOption) (*ListQueuesResponse, error)
+	// API key management. CreateApiKey bypasses auth (bootstrap); others require a valid key.
+	CreateApiKey(ctx context.Context, in *CreateApiKeyRequest, opts ...grpc.CallOption) (*CreateApiKeyResponse, error)
+	RevokeApiKey(ctx context.Context, in *RevokeApiKeyRequest, opts ...grpc.CallOption) (*RevokeApiKeyResponse, error)
+	ListApiKeys(ctx context.Context, in *ListApiKeysRequest, opts ...grpc.CallOption) (*ListApiKeysResponse, error)
+	// Per-key ACL management.
+	SetAcl(ctx context.Context, in *SetAclRequest, opts ...grpc.CallOption) (*SetAclResponse, error)
+	GetAcl(ctx context.Context, in *GetAclRequest, opts ...grpc.CallOption) (*GetAclResponse, error)
 }
 
 type filaAdminClient struct {
@@ -133,6 +145,56 @@ func (c *filaAdminClient) ListQueues(ctx context.Context, in *ListQueuesRequest,
 	return out, nil
 }
 
+func (c *filaAdminClient) CreateApiKey(ctx context.Context, in *CreateApiKeyRequest, opts ...grpc.CallOption) (*CreateApiKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(CreateApiKeyResponse)
+	err := c.cc.Invoke(ctx, FilaAdmin_CreateApiKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *filaAdminClient) RevokeApiKey(ctx context.Context, in *RevokeApiKeyRequest, opts ...grpc.CallOption) (*RevokeApiKeyResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RevokeApiKeyResponse)
+	err := c.cc.Invoke(ctx, FilaAdmin_RevokeApiKey_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *filaAdminClient) ListApiKeys(ctx context.Context, in *ListApiKeysRequest, opts ...grpc.CallOption) (*ListApiKeysResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(ListApiKeysResponse)
+	err := c.cc.Invoke(ctx, FilaAdmin_ListApiKeys_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *filaAdminClient) SetAcl(ctx context.Context, in *SetAclRequest, opts ...grpc.CallOption) (*SetAclResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(SetAclResponse)
+	err := c.cc.Invoke(ctx, FilaAdmin_SetAcl_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *filaAdminClient) GetAcl(ctx context.Context, in *GetAclRequest, opts ...grpc.CallOption) (*GetAclResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetAclResponse)
+	err := c.cc.Invoke(ctx, FilaAdmin_GetAcl_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // FilaAdminServer is the server API for FilaAdmin service.
 // All implementations must embed UnimplementedFilaAdminServer
 // for forward compatibility.
@@ -147,6 +209,13 @@ type FilaAdminServer interface {
 	GetStats(context.Context, *GetStatsRequest) (*GetStatsResponse, error)
 	Redrive(context.Context, *RedriveRequest) (*RedriveResponse, error)
 	ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error)
+	// API key management. CreateApiKey bypasses auth (bootstrap); others require a valid key.
+	CreateApiKey(context.Context, *CreateApiKeyRequest) (*CreateApiKeyResponse, error)
+	RevokeApiKey(context.Context, *RevokeApiKeyRequest) (*RevokeApiKeyResponse, error)
+	ListApiKeys(context.Context, *ListApiKeysRequest) (*ListApiKeysResponse, error)
+	// Per-key ACL management.
+	SetAcl(context.Context, *SetAclRequest) (*SetAclResponse, error)
+	GetAcl(context.Context, *GetAclRequest) (*GetAclResponse, error)
 	mustEmbedUnimplementedFilaAdminServer()
 }
 
@@ -180,6 +249,21 @@ func (UnimplementedFilaAdminServer) Redrive(context.Context, *RedriveRequest) (*
 }
 func (UnimplementedFilaAdminServer) ListQueues(context.Context, *ListQueuesRequest) (*ListQueuesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListQueues not implemented")
+}
+func (UnimplementedFilaAdminServer) CreateApiKey(context.Context, *CreateApiKeyRequest) (*CreateApiKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method CreateApiKey not implemented")
+}
+func (UnimplementedFilaAdminServer) RevokeApiKey(context.Context, *RevokeApiKeyRequest) (*RevokeApiKeyResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RevokeApiKey not implemented")
+}
+func (UnimplementedFilaAdminServer) ListApiKeys(context.Context, *ListApiKeysRequest) (*ListApiKeysResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method ListApiKeys not implemented")
+}
+func (UnimplementedFilaAdminServer) SetAcl(context.Context, *SetAclRequest) (*SetAclResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method SetAcl not implemented")
+}
+func (UnimplementedFilaAdminServer) GetAcl(context.Context, *GetAclRequest) (*GetAclResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method GetAcl not implemented")
 }
 func (UnimplementedFilaAdminServer) mustEmbedUnimplementedFilaAdminServer() {}
 func (UnimplementedFilaAdminServer) testEmbeddedByValue()                   {}
@@ -346,6 +430,96 @@ func _FilaAdmin_ListQueues_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _FilaAdmin_CreateApiKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(CreateApiKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FilaAdminServer).CreateApiKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FilaAdmin_CreateApiKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FilaAdminServer).CreateApiKey(ctx, req.(*CreateApiKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FilaAdmin_RevokeApiKey_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RevokeApiKeyRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FilaAdminServer).RevokeApiKey(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FilaAdmin_RevokeApiKey_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FilaAdminServer).RevokeApiKey(ctx, req.(*RevokeApiKeyRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FilaAdmin_ListApiKeys_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListApiKeysRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FilaAdminServer).ListApiKeys(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FilaAdmin_ListApiKeys_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FilaAdminServer).ListApiKeys(ctx, req.(*ListApiKeysRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FilaAdmin_SetAcl_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(SetAclRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FilaAdminServer).SetAcl(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FilaAdmin_SetAcl_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FilaAdminServer).SetAcl(ctx, req.(*SetAclRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _FilaAdmin_GetAcl_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetAclRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(FilaAdminServer).GetAcl(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: FilaAdmin_GetAcl_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(FilaAdminServer).GetAcl(ctx, req.(*GetAclRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // FilaAdmin_ServiceDesc is the grpc.ServiceDesc for FilaAdmin service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -384,6 +558,26 @@ var FilaAdmin_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "ListQueues",
 			Handler:    _FilaAdmin_ListQueues_Handler,
+		},
+		{
+			MethodName: "CreateApiKey",
+			Handler:    _FilaAdmin_CreateApiKey_Handler,
+		},
+		{
+			MethodName: "RevokeApiKey",
+			Handler:    _FilaAdmin_RevokeApiKey_Handler,
+		},
+		{
+			MethodName: "ListApiKeys",
+			Handler:    _FilaAdmin_ListApiKeys_Handler,
+		},
+		{
+			MethodName: "SetAcl",
+			Handler:    _FilaAdmin_SetAcl_Handler,
+		},
+		{
+			MethodName: "GetAcl",
+			Handler:    _FilaAdmin_GetAcl_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
