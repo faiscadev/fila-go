@@ -106,6 +106,11 @@ func Dial(addr string, opts ...DialOption) (*Client, error) {
 		opt(&do)
 	}
 
+	// Validate: WithTLSClientCert requires WithTLSCACert.
+	if !do.hasTLS && (do.clientCert != nil || do.clientKey != nil) {
+		return nil, errors.New("WithTLSClientCert requires WithTLSCACert: client certificate has no effect without TLS")
+	}
+
 	var grpcOpts []grpc.DialOption
 
 	if do.hasTLS {
@@ -153,6 +158,11 @@ func buildTLSConfig(caCertPEM, clientCertPEM, clientKeyPEM []byte) (*tls.Config,
 	tlsConfig := &tls.Config{
 		RootCAs:    certPool,
 		MinVersion: tls.VersionTLS12,
+	}
+
+	// Reject partial mTLS config: both cert and key must be provided or neither.
+	if (clientCertPEM != nil) != (clientKeyPEM != nil) {
+		return nil, errors.New("both client certificate and key must be provided for mTLS")
 	}
 
 	if clientCertPEM != nil && clientKeyPEM != nil {

@@ -128,7 +128,11 @@ func startTLSTestServer(t *testing.T, caCertPEM, serverCertPEM, serverKeyPEM, cl
 		t.Skipf("fila-server binary not found at %s: %v", bin, err)
 	}
 	// Resolve to absolute path since cmd.Dir changes the working directory.
-	bin, _ = filepath.Abs(bin)
+	absBin, absErr := filepath.Abs(bin)
+	if absErr != nil {
+		t.Fatalf("failed to resolve absolute path for binary: %v", absErr)
+	}
+	bin = absBin
 
 	// Find a free port.
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
@@ -239,7 +243,11 @@ func startAuthTestServer(t *testing.T, bootstrapKey string) *testServer {
 		t.Skipf("fila-server binary not found at %s: %v", bin, err)
 	}
 	// Resolve to absolute path since cmd.Dir changes the working directory.
-	bin, _ = filepath.Abs(bin)
+	absBin, absErr := filepath.Abs(bin)
+	if absErr != nil {
+		t.Fatalf("failed to resolve absolute path for binary: %v", absErr)
+	}
+	bin = absBin
 
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {

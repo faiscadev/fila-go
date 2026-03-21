@@ -62,7 +62,10 @@ func main() {
 Connect to a TLS-enabled broker by providing the CA certificate:
 
 ```go
-caCert, _ := os.ReadFile("ca.crt")
+caCert, err := os.ReadFile("ca.crt")
+if err != nil {
+    log.Fatal(err)
+}
 client, err := fila.Dial("localhost:5555",
     fila.WithTLSCACert(caCert),
 )
@@ -71,9 +74,18 @@ client, err := fila.Dial("localhost:5555",
 For mutual TLS (mTLS), also provide the client certificate and key:
 
 ```go
-caCert, _ := os.ReadFile("ca.crt")
-clientCert, _ := os.ReadFile("client.crt")
-clientKey, _ := os.ReadFile("client.key")
+caCert, err := os.ReadFile("ca.crt")
+if err != nil {
+    log.Fatal(err)
+}
+clientCert, err := os.ReadFile("client.crt")
+if err != nil {
+    log.Fatal(err)
+}
+clientKey, err := os.ReadFile("client.key")
+if err != nil {
+    log.Fatal(err)
+}
 
 client, err := fila.Dial("localhost:5555",
     fila.WithTLSCACert(caCert),
