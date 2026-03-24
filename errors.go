@@ -83,3 +83,28 @@ func mapNackError(err error) error {
 		return &RPCError{Code: st.Code(), Message: st.Message()}
 	}
 }
+
+// mapBatchEnqueueError maps a gRPC status to a batch-enqueue-specific error.
+func mapBatchEnqueueError(err error) error {
+	st, ok := status.FromError(err)
+	if !ok {
+		return err
+	}
+	switch st.Code() {
+	case codes.NotFound:
+		return fmt.Errorf("batch enqueue: %w: %s", ErrQueueNotFound, st.Message())
+	default:
+		return &RPCError{Code: st.Code(), Message: st.Message()}
+	}
+}
+
+// BatchItemError represents an error for an individual message within a
+// batch enqueue operation. The server processed the batch but this specific
+// message failed.
+type BatchItemError struct {
+	Message string
+}
+
+func (e *BatchItemError) Error() string {
+	return fmt.Sprintf("batch item error: %s", e.Message)
+}
