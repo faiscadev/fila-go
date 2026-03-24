@@ -39,36 +39,21 @@ func (c *Client) Consume(ctx context.Context, queue string) (<-chan *ConsumeMess
 		return nil, mapConsumeError(err)
 	}
 
-	// The server may accept the stream but send UNAVAILABLE on the first
-	// recv (common for server-streaming RPCs). Do a first recv to check.
-	resp, err := stream.Recv()
-	if err != nil {
-		// On UNAVAILABLE, check trailing metadata for a leader hint.
-		if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
-			if leaderAddr := extractLeaderHintFromTrailer(stream); leaderAddr != "" {
-				return c.consumeViaLeader(ctx, queue, leaderAddr)
-			}
-		}
-		return nil, mapConsumeError(err)
-	}
-
 	ch := make(chan *ConsumeMessage, 1)
-
-	// Send the first message (if it was a real message, not a keepalive).
-	if msg := convertMessage(resp); msg != nil {
-		select {
-		case ch <- msg:
-		case <-ctx.Done():
-			close(ch)
-			return ch, nil
-		}
-	}
 
 	go func() {
 		defer close(ch)
 		for {
 			resp, err := stream.Recv()
 			if err != nil {
+				// On UNAVAILABLE, check trailing metadata for a leader hint
+				// and transparently reconnect once.
+				if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
+					if leaderAddr := extractLeaderHintFromTrailer(stream); leaderAddr != "" {
+						c.consumeViaLeaderInto(ctx, queue, leaderAddr, ch)
+						return
+					}
+				}
 				return
 			}
 			msg := convertMessage(resp)
@@ -86,44 +71,38 @@ func (c *Client) Consume(ctx context.Context, queue string) (<-chan *ConsumeMess
 	return ch, nil
 }
 
-// consumeViaLeader dials the leader address and opens a consume stream.
-// The temporary connection is closed when the stream ends.
-func (c *Client) consumeViaLeader(ctx context.Context, queue, leaderAddr string) (<-chan *ConsumeMessage, error) {
+// consumeViaLeaderInto dials the leader address and pumps messages into the
+// provided channel. The temporary connection is closed when the stream ends.
+// This is called from within the goroutine, so it must not spawn another one.
+func (c *Client) consumeViaLeaderInto(ctx context.Context, queue, leaderAddr string, ch chan *ConsumeMessage) {
 	leaderClient, err := Dial(leaderAddr, c.opts...)
 	if err != nil {
-		return nil, err
+		return
 	}
+	defer leaderClient.Close()
 
 	stream, err := leaderClient.svc.Consume(ctx, &filav1.ConsumeRequest{
 		Queue: queue,
 	})
 	if err != nil {
-		leaderClient.Close()
-		return nil, mapConsumeError(err)
+		return
 	}
 
-	ch := make(chan *ConsumeMessage, 1)
-	go func() {
-		defer close(ch)
-		defer leaderClient.Close()
-		for {
-			resp, err := stream.Recv()
-			if err != nil {
-				return
-			}
-			msg := convertMessage(resp)
-			if msg == nil {
-				continue
-			}
-			select {
-			case ch <- msg:
-			case <-ctx.Done():
-				return
-			}
+	for {
+		resp, err := stream.Recv()
+		if err != nil {
+			return
 		}
-	}()
-
-	return ch, nil
+		msg := convertMessage(resp)
+		if msg == nil {
+			continue
+		}
+		select {
+		case ch <- msg:
+		case <-ctx.Done():
+			return
+		}
+	}
 }
 
 // extractLeaderHintFromTrailer reads the leader address from the stream's
