@@ -20,6 +20,7 @@ import (
 type Client struct {
 	conn *grpc.ClientConn
 	svc  filav1.FilaServiceClient
+	opts []DialOption
 }
 
 // DialOption configures how the client connects to the broker.
@@ -151,6 +152,7 @@ func Dial(addr string, opts ...DialOption) (*Client, error) {
 	return &Client{
 		conn: conn,
 		svc:  filav1.NewFilaServiceClient(conn),
+		opts: opts,
 	}, nil
 }
 
