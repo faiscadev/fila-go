@@ -17,10 +17,15 @@ import (
 //
 // It wraps the hot-path gRPC operations: Enqueue, Consume, Ack, Nack.
 // The client is safe for concurrent use.
+//
+// By default, Enqueue() routes through an internal batcher that uses
+// opportunistic batching (BatchModeAuto). Use WithBatchMode() to change
+// the batching strategy.
 type Client struct {
-	conn *grpc.ClientConn
-	svc  filav1.FilaServiceClient
-	opts []DialOption
+	conn    *grpc.ClientConn
+	svc     filav1.FilaServiceClient
+	opts    []DialOption
+	batcher *batcher
 }
 
 // DialOption configures how the client connects to the broker.
@@ -32,8 +37,10 @@ type dialOptions struct {
 	clientCert  []byte
 	clientKey   []byte
 	apiKey      string
+	batchMode   BatchMode
 	hasTLS      bool
 	hasAPIKey   bool
+	hasBatch    bool
 }
 
 // WithGRPCDialOption adds a raw gRPC dial option for advanced configuration.
@@ -89,6 +96,18 @@ func WithAPIKey(key string) DialOption {
 	}
 }
 
+// WithBatchMode sets the batching strategy for Enqueue() calls.
+//
+// The default is BatchModeAuto{} (opportunistic batching). Use
+// BatchModeLinger{} for timer-based batching, or BatchModeDisabled{}
+// to send each Enqueue() as a direct RPC.
+func WithBatchMode(mode BatchMode) DialOption {
+	return func(o *dialOptions) {
+		o.batchMode = mode
+		o.hasBatch = true
+	}
+}
+
 // apiKeyCredentials implements grpc.PerRPCCredentials to attach an API key
 // as a Bearer token on every outgoing RPC.
 type apiKeyCredentials struct {
@@ -112,6 +131,10 @@ func (c *apiKeyCredentials) RequireTransportSecurity() bool {
 // The address should be in the form "host:port" (e.g., "localhost:5555").
 // Connection is established lazily on the first RPC call. Use context
 // timeouts on individual operations to control deadlines.
+//
+// By default, a background batcher goroutine is started with
+// BatchModeAuto. Call Close() to drain pending messages and shut down
+// the batcher cleanly.
 func Dial(addr string, opts ...DialOption) (*Client, error) {
 	var do dialOptions
 	for _, opt := range opts {
@@ -149,15 +172,34 @@ func Dial(addr string, opts ...DialOption) (*Client, error) {
 		return nil, err
 	}
 
-	return &Client{
+	svc := filav1.NewFilaServiceClient(conn)
+
+	// Determine batch mode.
+	batchMode := do.batchMode
+	if !do.hasBatch {
+		batchMode = BatchModeAuto{}
+	}
+
+	c := &Client{
 		conn: conn,
-		svc:  filav1.NewFilaServiceClient(conn),
+		svc:  svc,
 		opts: opts,
-	}, nil
+	}
+
+	// Start batcher unless disabled.
+	if _, disabled := batchMode.(BatchModeDisabled); !disabled {
+		c.batcher = newBatcher(svc, batchMode)
+	}
+
+	return c, nil
 }
 
-// Close closes the underlying gRPC connection.
+// Close drains any pending batched messages and closes the underlying
+// gRPC connection.
 func (c *Client) Close() error {
+	if c.batcher != nil {
+		c.batcher.drain()
+	}
 	return c.conn.Close()
 }
 
