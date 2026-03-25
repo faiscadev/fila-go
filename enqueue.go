@@ -68,8 +68,13 @@ func (c *Client) EnqueueMany(ctx context.Context, messages []EnqueueMessage) ([]
 		return nil, mapEnqueueError(err)
 	}
 
-	results := make([]EnqueueManyResult, len(resp.Results))
-	for i, r := range resp.Results {
+	results := make([]EnqueueManyResult, len(messages))
+	for i := range messages {
+		if i >= len(resp.Results) {
+			results[i] = EnqueueManyResult{Err: fmt.Errorf("enqueue: server returned fewer results than messages sent")}
+			continue
+		}
+		r := resp.Results[i]
 		switch v := r.Result.(type) {
 		case *filav1.EnqueueResult_MessageId:
 			results[i] = EnqueueManyResult{MessageID: v.MessageId}
