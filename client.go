@@ -18,29 +18,29 @@ import (
 // It wraps the hot-path gRPC operations: Enqueue, Consume, Ack, Nack.
 // The client is safe for concurrent use.
 //
-// By default, Enqueue() routes through an internal batcher that uses
-// opportunistic batching (BatchModeAuto). Use WithBatchMode() to change
-// the batching strategy.
+// By default, Enqueue() routes through an internal accumulator that uses
+// opportunistic accumulation (AccumulatorModeAuto). Use
+// WithAccumulatorMode() to change the accumulation strategy.
 type Client struct {
-	conn    *grpc.ClientConn
-	svc     filav1.FilaServiceClient
-	opts    []DialOption
-	batcher *batcher
+	conn        *grpc.ClientConn
+	svc         filav1.FilaServiceClient
+	opts        []DialOption
+	accumulator *accumulator
 }
 
 // DialOption configures how the client connects to the broker.
 type DialOption func(*dialOptions)
 
 type dialOptions struct {
-	grpcOpts    []grpc.DialOption
-	caCertPEM   []byte
-	clientCert  []byte
-	clientKey   []byte
-	apiKey      string
-	batchMode   BatchMode
-	hasTLS      bool
-	hasAPIKey   bool
-	hasBatch    bool
+	grpcOpts        []grpc.DialOption
+	caCertPEM       []byte
+	clientCert      []byte
+	clientKey       []byte
+	apiKey          string
+	accumulatorMode AccumulatorMode
+	hasTLS          bool
+	hasAPIKey       bool
+	hasAccumulator  bool
 }
 
 // WithGRPCDialOption adds a raw gRPC dial option for advanced configuration.
@@ -96,15 +96,15 @@ func WithAPIKey(key string) DialOption {
 	}
 }
 
-// WithBatchMode sets the batching strategy for Enqueue() calls.
+// WithAccumulatorMode sets the accumulation strategy for Enqueue() calls.
 //
-// The default is BatchModeAuto{} (opportunistic batching). Use
-// BatchModeLinger{} for timer-based batching, or BatchModeDisabled{}
-// to send each Enqueue() as a direct RPC.
-func WithBatchMode(mode BatchMode) DialOption {
+// The default is AccumulatorModeAuto{} (opportunistic accumulation). Use
+// AccumulatorModeLinger{} for timer-based accumulation, or
+// AccumulatorModeDisabled{} to send each Enqueue() as a direct RPC.
+func WithAccumulatorMode(mode AccumulatorMode) DialOption {
 	return func(o *dialOptions) {
-		o.batchMode = mode
-		o.hasBatch = true
+		o.accumulatorMode = mode
+		o.hasAccumulator = true
 	}
 }
 
@@ -132,9 +132,9 @@ func (c *apiKeyCredentials) RequireTransportSecurity() bool {
 // Connection is established lazily on the first RPC call. Use context
 // timeouts on individual operations to control deadlines.
 //
-// By default, a background batcher goroutine is started with
-// BatchModeAuto. Call Close() to drain pending messages and shut down
-// the batcher cleanly.
+// By default, a background accumulator goroutine is started with
+// AccumulatorModeAuto. Call Close() to drain pending messages and shut
+// down the accumulator cleanly.
 func Dial(addr string, opts ...DialOption) (*Client, error) {
 	var do dialOptions
 	for _, opt := range opts {
@@ -174,10 +174,10 @@ func Dial(addr string, opts ...DialOption) (*Client, error) {
 
 	svc := filav1.NewFilaServiceClient(conn)
 
-	// Determine batch mode.
-	batchMode := do.batchMode
-	if !do.hasBatch {
-		batchMode = BatchModeAuto{}
+	// Determine accumulator mode.
+	accMode := do.accumulatorMode
+	if !do.hasAccumulator {
+		accMode = AccumulatorModeAuto{}
 	}
 
 	c := &Client{
@@ -186,19 +186,19 @@ func Dial(addr string, opts ...DialOption) (*Client, error) {
 		opts: opts,
 	}
 
-	// Start batcher unless disabled.
-	if _, disabled := batchMode.(BatchModeDisabled); !disabled {
-		c.batcher = newBatcher(svc, batchMode)
+	// Start accumulator unless disabled.
+	if _, disabled := accMode.(AccumulatorModeDisabled); !disabled {
+		c.accumulator = newAccumulator(svc, accMode)
 	}
 
 	return c, nil
 }
 
-// Close drains any pending batched messages and closes the underlying
+// Close drains any pending accumulated messages and closes the underlying
 // gRPC connection.
 func (c *Client) Close() error {
-	if c.batcher != nil {
-		c.batcher.drain()
+	if c.accumulator != nil {
+		c.accumulator.drain()
 	}
 	return c.conn.Close()
 }

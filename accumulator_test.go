@@ -11,9 +11,9 @@ import (
 	fila "github.com/faisca/fila-go"
 )
 
-func TestBatchEnqueueExplicit(t *testing.T) {
+func TestEnqueueManyExplicit(t *testing.T) {
 	ts := startTestServer(t)
-	queueName := "test-batch-enqueue"
+	queueName := "test-enqueue-many"
 	createQueue(t, ts.addr, queueName)
 
 	client, err := fila.Dial(ts.addr)
@@ -31,9 +31,9 @@ func TestBatchEnqueueExplicit(t *testing.T) {
 		{Queue: queueName, Headers: map[string]string{"index": "2"}, Payload: []byte("msg-2")},
 	}
 
-	results, err := client.BatchEnqueue(ctx, messages)
+	results, err := client.EnqueueMany(ctx, messages)
 	if err != nil {
-		t.Fatalf("batch enqueue failed: %v", err)
+		t.Fatalf("enqueue many failed: %v", err)
 	}
 
 	if len(results) != 3 {
@@ -70,7 +70,7 @@ func TestBatchEnqueueExplicit(t *testing.T) {
 	}
 }
 
-func TestBatchEnqueueEmpty(t *testing.T) {
+func TestEnqueueManyEmpty(t *testing.T) {
 	ts := startTestServer(t)
 
 	client, err := fila.Dial(ts.addr)
@@ -82,26 +82,26 @@ func TestBatchEnqueueEmpty(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	results, err := client.BatchEnqueue(ctx, nil)
+	results, err := client.EnqueueMany(ctx, nil)
 	if err != nil {
-		t.Fatalf("batch enqueue with nil should not error: %v", err)
+		t.Fatalf("enqueue many with nil should not error: %v", err)
 	}
 	if results != nil {
-		t.Errorf("expected nil results for empty batch, got %v", results)
+		t.Errorf("expected nil results for empty input, got %v", results)
 	}
 
-	results, err = client.BatchEnqueue(ctx, []fila.EnqueueMessage{})
+	results, err = client.EnqueueMany(ctx, []fila.EnqueueMessage{})
 	if err != nil {
-		t.Fatalf("batch enqueue with empty slice should not error: %v", err)
+		t.Fatalf("enqueue many with empty slice should not error: %v", err)
 	}
 	if results != nil {
-		t.Errorf("expected nil results for empty batch, got %v", results)
+		t.Errorf("expected nil results for empty input, got %v", results)
 	}
 }
 
-func TestBatchEnqueuePartialFailure(t *testing.T) {
+func TestEnqueueManyPartialFailure(t *testing.T) {
 	ts := startTestServer(t)
-	queueName := "test-batch-partial"
+	queueName := "test-enqueue-many-partial"
 	createQueue(t, ts.addr, queueName)
 
 	client, err := fila.Dial(ts.addr)
@@ -119,9 +119,9 @@ func TestBatchEnqueuePartialFailure(t *testing.T) {
 		{Queue: "nonexistent-queue", Payload: []byte("bad-msg")},
 	}
 
-	results, err := client.BatchEnqueue(ctx, messages)
+	results, err := client.EnqueueMany(ctx, messages)
 	if err != nil {
-		t.Fatalf("batch enqueue failed at RPC level: %v", err)
+		t.Fatalf("enqueue many failed at RPC level: %v", err)
 	}
 
 	if len(results) != 2 {
@@ -142,12 +142,12 @@ func TestBatchEnqueuePartialFailure(t *testing.T) {
 	}
 }
 
-func TestEnqueueWithBatchModeDisabled(t *testing.T) {
+func TestEnqueueWithAccumulatorDisabled(t *testing.T) {
 	ts := startTestServer(t)
-	queueName := "test-batch-disabled"
+	queueName := "test-accumulator-disabled"
 	createQueue(t, ts.addr, queueName)
 
-	client, err := fila.Dial(ts.addr, fila.WithBatchMode(fila.BatchModeDisabled{}))
+	client, err := fila.Dial(ts.addr, fila.WithAccumulatorMode(fila.AccumulatorModeDisabled{}))
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
 	}
@@ -175,12 +175,12 @@ func TestEnqueueWithBatchModeDisabled(t *testing.T) {
 	}
 }
 
-func TestEnqueueWithBatchModeAuto(t *testing.T) {
+func TestEnqueueWithAccumulatorAuto(t *testing.T) {
 	ts := startTestServer(t)
-	queueName := "test-batch-auto"
+	queueName := "test-accumulator-auto"
 	createQueue(t, ts.addr, queueName)
 
-	client, err := fila.Dial(ts.addr, fila.WithBatchMode(fila.BatchModeAuto{}))
+	client, err := fila.Dial(ts.addr, fila.WithAccumulatorMode(fila.AccumulatorModeAuto{}))
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
 	}
@@ -189,8 +189,8 @@ func TestEnqueueWithBatchModeAuto(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Single enqueue through batcher should work.
-	msgID, err := client.Enqueue(ctx, queueName, nil, []byte("auto-batch"))
+	// Single enqueue through accumulator should work.
+	msgID, err := client.Enqueue(ctx, queueName, nil, []byte("auto-accumulate"))
 	if err != nil {
 		t.Fatalf("enqueue failed: %v", err)
 	}
@@ -199,14 +199,14 @@ func TestEnqueueWithBatchModeAuto(t *testing.T) {
 	}
 }
 
-func TestEnqueueWithBatchModeLinger(t *testing.T) {
+func TestEnqueueWithAccumulatorLinger(t *testing.T) {
 	ts := startTestServer(t)
-	queueName := "test-batch-linger"
+	queueName := "test-accumulator-linger"
 	createQueue(t, ts.addr, queueName)
 
-	client, err := fila.Dial(ts.addr, fila.WithBatchMode(fila.BatchModeLinger{
-		LingerMs:  50,
-		BatchSize: 10,
+	client, err := fila.Dial(ts.addr, fila.WithAccumulatorMode(fila.AccumulatorModeLinger{
+		LingerMs: 50,
+		MaxSize:  10,
 	}))
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
@@ -216,7 +216,7 @@ func TestEnqueueWithBatchModeLinger(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	msgID, err := client.Enqueue(ctx, queueName, nil, []byte("linger-batch"))
+	msgID, err := client.Enqueue(ctx, queueName, nil, []byte("linger-accumulate"))
 	if err != nil {
 		t.Fatalf("enqueue failed: %v", err)
 	}
@@ -225,12 +225,12 @@ func TestEnqueueWithBatchModeLinger(t *testing.T) {
 	}
 }
 
-func TestEnqueueConcurrentBatching(t *testing.T) {
+func TestEnqueueConcurrentAccumulation(t *testing.T) {
 	ts := startTestServer(t)
-	queueName := "test-concurrent-batch"
+	queueName := "test-concurrent-accumulate"
 	createQueue(t, ts.addr, queueName)
 
-	client, err := fila.Dial(ts.addr, fila.WithBatchMode(fila.BatchModeAuto{}))
+	client, err := fila.Dial(ts.addr, fila.WithAccumulatorMode(fila.AccumulatorModeAuto{}))
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
 	}
@@ -244,7 +244,7 @@ func TestEnqueueConcurrentBatching(t *testing.T) {
 	var successCount atomic.Int32
 	var errCount atomic.Int32
 
-	// Send many messages concurrently to exercise batching.
+	// Send many messages concurrently to exercise accumulation.
 	for i := 0; i < numMessages; i++ {
 		wg.Add(1)
 		go func() {
@@ -270,10 +270,10 @@ func TestEnqueueConcurrentBatching(t *testing.T) {
 	}
 }
 
-func TestEnqueueDefaultBatchMode(t *testing.T) {
-	// Default Dial() should use BatchModeAuto (not panic or error).
+func TestEnqueueDefaultAccumulatorMode(t *testing.T) {
+	// Default Dial() should use AccumulatorModeAuto (not panic or error).
 	ts := startTestServer(t)
-	queueName := "test-default-batch"
+	queueName := "test-default-accumulator"
 	createQueue(t, ts.addr, queueName)
 
 	client, err := fila.Dial(ts.addr)
@@ -287,7 +287,7 @@ func TestEnqueueDefaultBatchMode(t *testing.T) {
 
 	msgID, err := client.Enqueue(ctx, queueName, nil, []byte("default-mode"))
 	if err != nil {
-		t.Fatalf("enqueue with default batch mode failed: %v", err)
+		t.Fatalf("enqueue with default accumulator mode failed: %v", err)
 	}
 	if msgID == "" {
 		t.Fatal("expected non-empty message ID")
@@ -299,9 +299,9 @@ func TestCloseFlushesPendingMessages(t *testing.T) {
 	queueName := "test-close-flush"
 	createQueue(t, ts.addr, queueName)
 
-	client, err := fila.Dial(ts.addr, fila.WithBatchMode(fila.BatchModeLinger{
-		LingerMs:  5000, // Very long linger to ensure message is pending.
-		BatchSize: 1000,
+	client, err := fila.Dial(ts.addr, fila.WithAccumulatorMode(fila.AccumulatorModeLinger{
+		LingerMs: 5000, // Very long linger to ensure message is pending.
+		MaxSize:  1000,
 	}))
 	if err != nil {
 		t.Fatalf("failed to dial: %v", err)
@@ -310,7 +310,7 @@ func TestCloseFlushesPendingMessages(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
-	// Send a message that will be lingering in the batcher.
+	// Send a message that will be lingering in the accumulator.
 	var enqErr error
 	var msgID string
 	done := make(chan struct{})
@@ -335,7 +335,7 @@ func TestCloseFlushesPendingMessages(t *testing.T) {
 	}
 }
 
-func TestBatchEnqueueNonexistentQueue(t *testing.T) {
+func TestEnqueueManyNonexistentQueue(t *testing.T) {
 	ts := startTestServer(t)
 
 	client, err := fila.Dial(ts.addr)
@@ -350,10 +350,10 @@ func TestBatchEnqueueNonexistentQueue(t *testing.T) {
 	// All messages to a nonexistent queue: depending on server behavior,
 	// the RPC may return per-item errors or a top-level error.
 	messages := []fila.EnqueueMessage{
-		{Queue: "nonexistent-batch-queue", Payload: []byte("msg1")},
+		{Queue: "nonexistent-enqueue-many-queue", Payload: []byte("msg1")},
 	}
 
-	results, err := client.BatchEnqueue(ctx, messages)
+	results, err := client.EnqueueMany(ctx, messages)
 	if err != nil {
 		// Top-level RPC error is acceptable.
 		return
@@ -361,6 +361,6 @@ func TestBatchEnqueueNonexistentQueue(t *testing.T) {
 
 	// If the server returned per-item results, check them.
 	if len(results) > 0 && results[0].Err == nil {
-		t.Error("expected error for nonexistent queue in batch result")
+		t.Error("expected error for nonexistent queue in result")
 	}
 }
