@@ -28,7 +28,7 @@ const leaderHintKey = "x-fila-leader-addr"
 // available. The channel is closed when the server stream ends, the context
 // is cancelled, or a stream error occurs.
 //
-// The consumer transparently unpacks batched delivery: when the server
+// The consumer transparently unpacks delivery batches: when the server
 // sends multiple messages in a single ConsumeResponse (via the repeated
 // messages field), each message is delivered individually on the channel.
 //
@@ -98,9 +98,8 @@ func (c *Client) consumeViaLeaderInto(ctx context.Context, queue, leaderAddr str
 }
 
 // sendMessages extracts messages from a ConsumeResponse and sends them on
-// the channel. It handles both the singular message field (backward compat)
-// and the repeated messages field (batched delivery). Returns false if the
-// context was cancelled and the caller should stop.
+// the channel. Returns false if the context was cancelled and the caller
+// should stop.
 func sendMessages(ctx context.Context, ch chan *ConsumeMessage, resp *filav1.ConsumeResponse) bool {
 	msgs := extractMessages(resp)
 	for _, msg := range msgs {
@@ -114,28 +113,19 @@ func sendMessages(ctx context.Context, ch chan *ConsumeMessage, resp *filav1.Con
 }
 
 // extractMessages unpacks a ConsumeResponse into individual ConsumeMessages.
-// If the repeated messages field is populated, those are used. Otherwise,
-// falls back to the singular message field for backward compatibility.
-// Returns nil for keepalive frames (no messages).
+// Returns nil for keepalive frames (empty messages field).
 func extractMessages(resp *filav1.ConsumeResponse) []*ConsumeMessage {
-	// Prefer the repeated messages field (batched delivery).
-	if len(resp.Messages) > 0 {
-		result := make([]*ConsumeMessage, 0, len(resp.Messages))
-		for _, msg := range resp.Messages {
-			cm := protoToConsumeMessage(msg)
-			if cm != nil {
-				result = append(result, cm)
-			}
-		}
-		return result
-	}
-
-	// Fall back to singular message field (backward compatible).
-	cm := protoToConsumeMessage(resp.Message)
-	if cm == nil {
+	if len(resp.Messages) == 0 {
 		return nil
 	}
-	return []*ConsumeMessage{cm}
+	result := make([]*ConsumeMessage, 0, len(resp.Messages))
+	for _, msg := range resp.Messages {
+		cm := protoToConsumeMessage(msg)
+		if cm != nil {
+			result = append(result, cm)
+		}
+	}
+	return result
 }
 
 // extractLeaderHintFromTrailer reads the leader address from the stream's

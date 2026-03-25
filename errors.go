@@ -28,6 +28,29 @@ func (e *RPCError) Error() string {
 	return fmt.Sprintf("rpc error (code = %s): %s", e.Code, e.Message)
 }
 
+// ItemError represents an error for an individual message within a
+// multi-message operation. The server processed the request but this
+// specific message failed.
+//
+// When the error code maps to a sentinel error (e.g., ErrQueueNotFound,
+// ErrMessageNotFound), the ItemError wraps it so errors.Is works.
+type ItemError struct {
+	Code    string
+	Message string
+	cause   error
+}
+
+func (e *ItemError) Error() string {
+	if e.Code != "" {
+		return fmt.Sprintf("item error (%s): %s", e.Code, e.Message)
+	}
+	return fmt.Sprintf("item error: %s", e.Message)
+}
+
+func (e *ItemError) Unwrap() error {
+	return e.cause
+}
+
 // mapEnqueueError maps a gRPC status to an enqueue-specific error.
 func mapEnqueueError(err error) error {
 	st, ok := status.FromError(err)
@@ -82,29 +105,4 @@ func mapNackError(err error) error {
 	default:
 		return &RPCError{Code: st.Code(), Message: st.Message()}
 	}
-}
-
-// mapBatchEnqueueError maps a gRPC status to a batch-enqueue-specific error.
-func mapBatchEnqueueError(err error) error {
-	st, ok := status.FromError(err)
-	if !ok {
-		return err
-	}
-	switch st.Code() {
-	case codes.NotFound:
-		return fmt.Errorf("batch enqueue: %w: %s", ErrQueueNotFound, st.Message())
-	default:
-		return &RPCError{Code: st.Code(), Message: st.Message()}
-	}
-}
-
-// BatchItemError represents an error for an individual message within a
-// batch enqueue operation. The server processed the batch but this specific
-// message failed.
-type BatchItemError struct {
-	Message string
-}
-
-func (e *BatchItemError) Error() string {
-	return fmt.Sprintf("batch item error: %s", e.Message)
 }

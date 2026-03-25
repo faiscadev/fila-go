@@ -19,11 +19,11 @@ import (
 const _ = grpc.SupportPackageIsVersion9
 
 const (
-	FilaService_Enqueue_FullMethodName      = "/fila.v1.FilaService/Enqueue"
-	FilaService_BatchEnqueue_FullMethodName = "/fila.v1.FilaService/BatchEnqueue"
-	FilaService_Consume_FullMethodName      = "/fila.v1.FilaService/Consume"
-	FilaService_Ack_FullMethodName          = "/fila.v1.FilaService/Ack"
-	FilaService_Nack_FullMethodName         = "/fila.v1.FilaService/Nack"
+	FilaService_Enqueue_FullMethodName       = "/fila.v1.FilaService/Enqueue"
+	FilaService_StreamEnqueue_FullMethodName = "/fila.v1.FilaService/StreamEnqueue"
+	FilaService_Consume_FullMethodName       = "/fila.v1.FilaService/Consume"
+	FilaService_Ack_FullMethodName           = "/fila.v1.FilaService/Ack"
+	FilaService_Nack_FullMethodName          = "/fila.v1.FilaService/Nack"
 )
 
 // FilaServiceClient is the client API for FilaService service.
@@ -33,7 +33,7 @@ const (
 // Hot-path RPCs for producers and consumers.
 type FilaServiceClient interface {
 	Enqueue(ctx context.Context, in *EnqueueRequest, opts ...grpc.CallOption) (*EnqueueResponse, error)
-	BatchEnqueue(ctx context.Context, in *BatchEnqueueRequest, opts ...grpc.CallOption) (*BatchEnqueueResponse, error)
+	StreamEnqueue(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[StreamEnqueueRequest, StreamEnqueueResponse], error)
 	Consume(ctx context.Context, in *ConsumeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ConsumeResponse], error)
 	Ack(ctx context.Context, in *AckRequest, opts ...grpc.CallOption) (*AckResponse, error)
 	Nack(ctx context.Context, in *NackRequest, opts ...grpc.CallOption) (*NackResponse, error)
@@ -57,19 +57,22 @@ func (c *filaServiceClient) Enqueue(ctx context.Context, in *EnqueueRequest, opt
 	return out, nil
 }
 
-func (c *filaServiceClient) BatchEnqueue(ctx context.Context, in *BatchEnqueueRequest, opts ...grpc.CallOption) (*BatchEnqueueResponse, error) {
+func (c *filaServiceClient) StreamEnqueue(ctx context.Context, opts ...grpc.CallOption) (grpc.BidiStreamingClient[StreamEnqueueRequest, StreamEnqueueResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	out := new(BatchEnqueueResponse)
-	err := c.cc.Invoke(ctx, FilaService_BatchEnqueue_FullMethodName, in, out, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &FilaService_ServiceDesc.Streams[0], FilaService_StreamEnqueue_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
-	return out, nil
+	x := &grpc.GenericClientStream[StreamEnqueueRequest, StreamEnqueueResponse]{ClientStream: stream}
+	return x, nil
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type FilaService_StreamEnqueueClient = grpc.BidiStreamingClient[StreamEnqueueRequest, StreamEnqueueResponse]
 
 func (c *filaServiceClient) Consume(ctx context.Context, in *ConsumeRequest, opts ...grpc.CallOption) (grpc.ServerStreamingClient[ConsumeResponse], error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
-	stream, err := c.cc.NewStream(ctx, &FilaService_ServiceDesc.Streams[0], FilaService_Consume_FullMethodName, cOpts...)
+	stream, err := c.cc.NewStream(ctx, &FilaService_ServiceDesc.Streams[1], FilaService_Consume_FullMethodName, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -113,7 +116,7 @@ func (c *filaServiceClient) Nack(ctx context.Context, in *NackRequest, opts ...g
 // Hot-path RPCs for producers and consumers.
 type FilaServiceServer interface {
 	Enqueue(context.Context, *EnqueueRequest) (*EnqueueResponse, error)
-	BatchEnqueue(context.Context, *BatchEnqueueRequest) (*BatchEnqueueResponse, error)
+	StreamEnqueue(grpc.BidiStreamingServer[StreamEnqueueRequest, StreamEnqueueResponse]) error
 	Consume(*ConsumeRequest, grpc.ServerStreamingServer[ConsumeResponse]) error
 	Ack(context.Context, *AckRequest) (*AckResponse, error)
 	Nack(context.Context, *NackRequest) (*NackResponse, error)
@@ -130,8 +133,8 @@ type UnimplementedFilaServiceServer struct{}
 func (UnimplementedFilaServiceServer) Enqueue(context.Context, *EnqueueRequest) (*EnqueueResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method Enqueue not implemented")
 }
-func (UnimplementedFilaServiceServer) BatchEnqueue(context.Context, *BatchEnqueueRequest) (*BatchEnqueueResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "method BatchEnqueue not implemented")
+func (UnimplementedFilaServiceServer) StreamEnqueue(grpc.BidiStreamingServer[StreamEnqueueRequest, StreamEnqueueResponse]) error {
+	return status.Error(codes.Unimplemented, "method StreamEnqueue not implemented")
 }
 func (UnimplementedFilaServiceServer) Consume(*ConsumeRequest, grpc.ServerStreamingServer[ConsumeResponse]) error {
 	return status.Error(codes.Unimplemented, "method Consume not implemented")
@@ -181,23 +184,12 @@ func _FilaService_Enqueue_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _FilaService_BatchEnqueue_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(BatchEnqueueRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(FilaServiceServer).BatchEnqueue(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: FilaService_BatchEnqueue_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(FilaServiceServer).BatchEnqueue(ctx, req.(*BatchEnqueueRequest))
-	}
-	return interceptor(ctx, in, info, handler)
+func _FilaService_StreamEnqueue_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(FilaServiceServer).StreamEnqueue(&grpc.GenericServerStream[StreamEnqueueRequest, StreamEnqueueResponse]{ServerStream: stream})
 }
+
+// This type alias is provided for backwards compatibility with existing code that references the prior non-generic stream type by name.
+type FilaService_StreamEnqueueServer = grpc.BidiStreamingServer[StreamEnqueueRequest, StreamEnqueueResponse]
 
 func _FilaService_Consume_Handler(srv interface{}, stream grpc.ServerStream) error {
 	m := new(ConsumeRequest)
@@ -258,10 +250,6 @@ var FilaService_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _FilaService_Enqueue_Handler,
 		},
 		{
-			MethodName: "BatchEnqueue",
-			Handler:    _FilaService_BatchEnqueue_Handler,
-		},
-		{
 			MethodName: "Ack",
 			Handler:    _FilaService_Ack_Handler,
 		},
@@ -271,6 +259,12 @@ var FilaService_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "StreamEnqueue",
+			Handler:       _FilaService_StreamEnqueue_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
 		{
 			StreamName:    "Consume",
 			Handler:       _FilaService_Consume_Handler,

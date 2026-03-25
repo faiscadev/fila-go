@@ -21,7 +21,167 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-type EnqueueRequest struct {
+type EnqueueErrorCode int32
+
+const (
+	EnqueueErrorCode_ENQUEUE_ERROR_CODE_UNSPECIFIED       EnqueueErrorCode = 0
+	EnqueueErrorCode_ENQUEUE_ERROR_CODE_QUEUE_NOT_FOUND   EnqueueErrorCode = 1
+	EnqueueErrorCode_ENQUEUE_ERROR_CODE_STORAGE           EnqueueErrorCode = 2
+	EnqueueErrorCode_ENQUEUE_ERROR_CODE_LUA               EnqueueErrorCode = 3
+	EnqueueErrorCode_ENQUEUE_ERROR_CODE_PERMISSION_DENIED EnqueueErrorCode = 4
+)
+
+// Enum value maps for EnqueueErrorCode.
+var (
+	EnqueueErrorCode_name = map[int32]string{
+		0: "ENQUEUE_ERROR_CODE_UNSPECIFIED",
+		1: "ENQUEUE_ERROR_CODE_QUEUE_NOT_FOUND",
+		2: "ENQUEUE_ERROR_CODE_STORAGE",
+		3: "ENQUEUE_ERROR_CODE_LUA",
+		4: "ENQUEUE_ERROR_CODE_PERMISSION_DENIED",
+	}
+	EnqueueErrorCode_value = map[string]int32{
+		"ENQUEUE_ERROR_CODE_UNSPECIFIED":       0,
+		"ENQUEUE_ERROR_CODE_QUEUE_NOT_FOUND":   1,
+		"ENQUEUE_ERROR_CODE_STORAGE":           2,
+		"ENQUEUE_ERROR_CODE_LUA":               3,
+		"ENQUEUE_ERROR_CODE_PERMISSION_DENIED": 4,
+	}
+)
+
+func (x EnqueueErrorCode) Enum() *EnqueueErrorCode {
+	p := new(EnqueueErrorCode)
+	*p = x
+	return p
+}
+
+func (x EnqueueErrorCode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EnqueueErrorCode) Descriptor() protoreflect.EnumDescriptor {
+	return file_fila_v1_service_proto_enumTypes[0].Descriptor()
+}
+
+func (EnqueueErrorCode) Type() protoreflect.EnumType {
+	return &file_fila_v1_service_proto_enumTypes[0]
+}
+
+func (x EnqueueErrorCode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EnqueueErrorCode.Descriptor instead.
+func (EnqueueErrorCode) EnumDescriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{0}
+}
+
+type AckErrorCode int32
+
+const (
+	AckErrorCode_ACK_ERROR_CODE_UNSPECIFIED       AckErrorCode = 0
+	AckErrorCode_ACK_ERROR_CODE_MESSAGE_NOT_FOUND AckErrorCode = 1
+	AckErrorCode_ACK_ERROR_CODE_STORAGE           AckErrorCode = 2
+	AckErrorCode_ACK_ERROR_CODE_PERMISSION_DENIED AckErrorCode = 3
+)
+
+// Enum value maps for AckErrorCode.
+var (
+	AckErrorCode_name = map[int32]string{
+		0: "ACK_ERROR_CODE_UNSPECIFIED",
+		1: "ACK_ERROR_CODE_MESSAGE_NOT_FOUND",
+		2: "ACK_ERROR_CODE_STORAGE",
+		3: "ACK_ERROR_CODE_PERMISSION_DENIED",
+	}
+	AckErrorCode_value = map[string]int32{
+		"ACK_ERROR_CODE_UNSPECIFIED":       0,
+		"ACK_ERROR_CODE_MESSAGE_NOT_FOUND": 1,
+		"ACK_ERROR_CODE_STORAGE":           2,
+		"ACK_ERROR_CODE_PERMISSION_DENIED": 3,
+	}
+)
+
+func (x AckErrorCode) Enum() *AckErrorCode {
+	p := new(AckErrorCode)
+	*p = x
+	return p
+}
+
+func (x AckErrorCode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (AckErrorCode) Descriptor() protoreflect.EnumDescriptor {
+	return file_fila_v1_service_proto_enumTypes[1].Descriptor()
+}
+
+func (AckErrorCode) Type() protoreflect.EnumType {
+	return &file_fila_v1_service_proto_enumTypes[1]
+}
+
+func (x AckErrorCode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use AckErrorCode.Descriptor instead.
+func (AckErrorCode) EnumDescriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{1}
+}
+
+type NackErrorCode int32
+
+const (
+	NackErrorCode_NACK_ERROR_CODE_UNSPECIFIED       NackErrorCode = 0
+	NackErrorCode_NACK_ERROR_CODE_MESSAGE_NOT_FOUND NackErrorCode = 1
+	NackErrorCode_NACK_ERROR_CODE_STORAGE           NackErrorCode = 2
+	NackErrorCode_NACK_ERROR_CODE_PERMISSION_DENIED NackErrorCode = 3
+)
+
+// Enum value maps for NackErrorCode.
+var (
+	NackErrorCode_name = map[int32]string{
+		0: "NACK_ERROR_CODE_UNSPECIFIED",
+		1: "NACK_ERROR_CODE_MESSAGE_NOT_FOUND",
+		2: "NACK_ERROR_CODE_STORAGE",
+		3: "NACK_ERROR_CODE_PERMISSION_DENIED",
+	}
+	NackErrorCode_value = map[string]int32{
+		"NACK_ERROR_CODE_UNSPECIFIED":       0,
+		"NACK_ERROR_CODE_MESSAGE_NOT_FOUND": 1,
+		"NACK_ERROR_CODE_STORAGE":           2,
+		"NACK_ERROR_CODE_PERMISSION_DENIED": 3,
+	}
+)
+
+func (x NackErrorCode) Enum() *NackErrorCode {
+	p := new(NackErrorCode)
+	*p = x
+	return p
+}
+
+func (x NackErrorCode) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (NackErrorCode) Descriptor() protoreflect.EnumDescriptor {
+	return file_fila_v1_service_proto_enumTypes[2].Descriptor()
+}
+
+func (NackErrorCode) Type() protoreflect.EnumType {
+	return &file_fila_v1_service_proto_enumTypes[2]
+}
+
+func (x NackErrorCode) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use NackErrorCode.Descriptor instead.
+func (NackErrorCode) EnumDescriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{2}
+}
+
+// Individual message to enqueue.
+type EnqueueMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Queue         string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
 	Headers       map[string]string      `protobuf:"bytes,2,rep,name=headers,proto3" json:"headers,omitempty" protobuf_key:"bytes,1,opt,name=key" protobuf_val:"bytes,2,opt,name=value"`
@@ -30,9 +190,68 @@ type EnqueueRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *EnqueueMessage) Reset() {
+	*x = EnqueueMessage{}
+	mi := &file_fila_v1_service_proto_msgTypes[0]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnqueueMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnqueueMessage) ProtoMessage() {}
+
+func (x *EnqueueMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[0]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnqueueMessage.ProtoReflect.Descriptor instead.
+func (*EnqueueMessage) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{0}
+}
+
+func (x *EnqueueMessage) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *EnqueueMessage) GetHeaders() map[string]string {
+	if x != nil {
+		return x.Headers
+	}
+	return nil
+}
+
+func (x *EnqueueMessage) GetPayload() []byte {
+	if x != nil {
+		return x.Payload
+	}
+	return nil
+}
+
+// Enqueue one or more messages.
+type EnqueueRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*EnqueueMessage      `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
 func (x *EnqueueRequest) Reset() {
 	*x = EnqueueRequest{}
-	mi := &file_fila_v1_service_proto_msgTypes[0]
+	mi := &file_fila_v1_service_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -44,7 +263,7 @@ func (x *EnqueueRequest) String() string {
 func (*EnqueueRequest) ProtoMessage() {}
 
 func (x *EnqueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[0]
+	mi := &file_fila_v1_service_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -57,40 +276,163 @@ func (x *EnqueueRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnqueueRequest.ProtoReflect.Descriptor instead.
 func (*EnqueueRequest) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{0}
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{1}
 }
 
-func (x *EnqueueRequest) GetQueue() string {
+func (x *EnqueueRequest) GetMessages() []*EnqueueMessage {
 	if x != nil {
-		return x.Queue
+		return x.Messages
+	}
+	return nil
+}
+
+// Per-message enqueue result.
+type EnqueueResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Result:
+	//
+	//	*EnqueueResult_MessageId
+	//	*EnqueueResult_Error
+	Result        isEnqueueResult_Result `protobuf_oneof:"result"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnqueueResult) Reset() {
+	*x = EnqueueResult{}
+	mi := &file_fila_v1_service_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnqueueResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnqueueResult) ProtoMessage() {}
+
+func (x *EnqueueResult) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnqueueResult.ProtoReflect.Descriptor instead.
+func (*EnqueueResult) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *EnqueueResult) GetResult() isEnqueueResult_Result {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *EnqueueResult) GetMessageId() string {
+	if x != nil {
+		if x, ok := x.Result.(*EnqueueResult_MessageId); ok {
+			return x.MessageId
+		}
 	}
 	return ""
 }
 
-func (x *EnqueueRequest) GetHeaders() map[string]string {
+func (x *EnqueueResult) GetError() *EnqueueError {
 	if x != nil {
-		return x.Headers
+		if x, ok := x.Result.(*EnqueueResult_Error); ok {
+			return x.Error
+		}
 	}
 	return nil
 }
 
-func (x *EnqueueRequest) GetPayload() []byte {
-	if x != nil {
-		return x.Payload
-	}
-	return nil
+type isEnqueueResult_Result interface {
+	isEnqueueResult_Result()
 }
 
+type EnqueueResult_MessageId struct {
+	MessageId string `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3,oneof"`
+}
+
+type EnqueueResult_Error struct {
+	Error *EnqueueError `protobuf:"bytes,2,opt,name=error,proto3,oneof"`
+}
+
+func (*EnqueueResult_MessageId) isEnqueueResult_Result() {}
+
+func (*EnqueueResult_Error) isEnqueueResult_Result() {}
+
+// Typed enqueue error with structured error code.
+type EnqueueError struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          EnqueueErrorCode       `protobuf:"varint,1,opt,name=code,proto3,enum=fila.v1.EnqueueErrorCode" json:"code,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EnqueueError) Reset() {
+	*x = EnqueueError{}
+	mi := &file_fila_v1_service_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EnqueueError) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EnqueueError) ProtoMessage() {}
+
+func (x *EnqueueError) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EnqueueError.ProtoReflect.Descriptor instead.
+func (*EnqueueError) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *EnqueueError) GetCode() EnqueueErrorCode {
+	if x != nil {
+		return x.Code
+	}
+	return EnqueueErrorCode_ENQUEUE_ERROR_CODE_UNSPECIFIED
+}
+
+func (x *EnqueueError) GetMessage() string {
+	if x != nil {
+		return x.Message
+	}
+	return ""
+}
+
+// One result per input message.
 type EnqueueResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	MessageId     string                 `protobuf:"bytes,1,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
+	Results       []*EnqueueResult       `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *EnqueueResponse) Reset() {
 	*x = EnqueueResponse{}
-	mi := &file_fila_v1_service_proto_msgTypes[1]
+	mi := &file_fila_v1_service_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -102,7 +444,7 @@ func (x *EnqueueResponse) String() string {
 func (*EnqueueResponse) ProtoMessage() {}
 
 func (x *EnqueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[1]
+	mi := &file_fila_v1_service_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -115,14 +457,14 @@ func (x *EnqueueResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use EnqueueResponse.ProtoReflect.Descriptor instead.
 func (*EnqueueResponse) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{1}
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *EnqueueResponse) GetMessageId() string {
+func (x *EnqueueResponse) GetResults() []*EnqueueResult {
 	if x != nil {
-		return x.MessageId
+		return x.Results
 	}
-	return ""
+	return nil
 }
 
 type ConsumeRequest struct {
@@ -134,7 +476,7 @@ type ConsumeRequest struct {
 
 func (x *ConsumeRequest) Reset() {
 	*x = ConsumeRequest{}
-	mi := &file_fila_v1_service_proto_msgTypes[2]
+	mi := &file_fila_v1_service_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -146,7 +488,7 @@ func (x *ConsumeRequest) String() string {
 func (*ConsumeRequest) ProtoMessage() {}
 
 func (x *ConsumeRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[2]
+	mi := &file_fila_v1_service_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -159,7 +501,7 @@ func (x *ConsumeRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsumeRequest.ProtoReflect.Descriptor instead.
 func (*ConsumeRequest) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{2}
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ConsumeRequest) GetQueue() string {
@@ -171,15 +513,14 @@ func (x *ConsumeRequest) GetQueue() string {
 
 type ConsumeResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Message       *Message               `protobuf:"bytes,1,opt,name=message,proto3" json:"message,omitempty"`   // Single message (backward compatible, used when batch size is 1)
-	Messages      []*Message             `protobuf:"bytes,2,rep,name=messages,proto3" json:"messages,omitempty"` // Batched messages (populated when server sends multiple at once)
+	Messages      []*Message             `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *ConsumeResponse) Reset() {
 	*x = ConsumeResponse{}
-	mi := &file_fila_v1_service_proto_msgTypes[3]
+	mi := &file_fila_v1_service_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -191,7 +532,7 @@ func (x *ConsumeResponse) String() string {
 func (*ConsumeResponse) ProtoMessage() {}
 
 func (x *ConsumeResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[3]
+	mi := &file_fila_v1_service_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -204,14 +545,7 @@ func (x *ConsumeResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ConsumeResponse.ProtoReflect.Descriptor instead.
 func (*ConsumeResponse) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{3}
-}
-
-func (x *ConsumeResponse) GetMessage() *Message {
-	if x != nil {
-		return x.Message
-	}
-	return nil
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *ConsumeResponse) GetMessages() []*Message {
@@ -221,7 +555,8 @@ func (x *ConsumeResponse) GetMessages() []*Message {
 	return nil
 }
 
-type AckRequest struct {
+// Individual ack item.
+type AckMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Queue         string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
 	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
@@ -229,9 +564,60 @@ type AckRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *AckMessage) Reset() {
+	*x = AckMessage{}
+	mi := &file_fila_v1_service_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AckMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AckMessage) ProtoMessage() {}
+
+func (x *AckMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AckMessage.ProtoReflect.Descriptor instead.
+func (*AckMessage) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *AckMessage) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *AckMessage) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+type AckRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*AckMessage          `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
 func (x *AckRequest) Reset() {
 	*x = AckRequest{}
-	mi := &file_fila_v1_service_proto_msgTypes[4]
+	mi := &file_fila_v1_service_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -243,7 +629,7 @@ func (x *AckRequest) String() string {
 func (*AckRequest) ProtoMessage() {}
 
 func (x *AckRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[4]
+	mi := &file_fila_v1_service_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -256,32 +642,196 @@ func (x *AckRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckRequest.ProtoReflect.Descriptor instead.
 func (*AckRequest) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{4}
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *AckRequest) GetQueue() string {
+func (x *AckRequest) GetMessages() []*AckMessage {
 	if x != nil {
-		return x.Queue
+		return x.Messages
 	}
-	return ""
+	return nil
 }
 
-func (x *AckRequest) GetMessageId() string {
+type AckResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Result:
+	//
+	//	*AckResult_Success
+	//	*AckResult_Error
+	Result        isAckResult_Result `protobuf_oneof:"result"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AckResult) Reset() {
+	*x = AckResult{}
+	mi := &file_fila_v1_service_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AckResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AckResult) ProtoMessage() {}
+
+func (x *AckResult) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[9]
 	if x != nil {
-		return x.MessageId
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AckResult.ProtoReflect.Descriptor instead.
+func (*AckResult) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *AckResult) GetResult() isAckResult_Result {
+	if x != nil {
+		return x.Result
+	}
+	return nil
+}
+
+func (x *AckResult) GetSuccess() *AckSuccess {
+	if x != nil {
+		if x, ok := x.Result.(*AckResult_Success); ok {
+			return x.Success
+		}
+	}
+	return nil
+}
+
+func (x *AckResult) GetError() *AckError {
+	if x != nil {
+		if x, ok := x.Result.(*AckResult_Error); ok {
+			return x.Error
+		}
+	}
+	return nil
+}
+
+type isAckResult_Result interface {
+	isAckResult_Result()
+}
+
+type AckResult_Success struct {
+	Success *AckSuccess `protobuf:"bytes,1,opt,name=success,proto3,oneof"`
+}
+
+type AckResult_Error struct {
+	Error *AckError `protobuf:"bytes,2,opt,name=error,proto3,oneof"`
+}
+
+func (*AckResult_Success) isAckResult_Result() {}
+
+func (*AckResult_Error) isAckResult_Result() {}
+
+type AckSuccess struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AckSuccess) Reset() {
+	*x = AckSuccess{}
+	mi := &file_fila_v1_service_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AckSuccess) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AckSuccess) ProtoMessage() {}
+
+func (x *AckSuccess) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AckSuccess.ProtoReflect.Descriptor instead.
+func (*AckSuccess) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{10}
+}
+
+type AckError struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          AckErrorCode           `protobuf:"varint,1,opt,name=code,proto3,enum=fila.v1.AckErrorCode" json:"code,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *AckError) Reset() {
+	*x = AckError{}
+	mi := &file_fila_v1_service_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *AckError) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*AckError) ProtoMessage() {}
+
+func (x *AckError) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use AckError.ProtoReflect.Descriptor instead.
+func (*AckError) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *AckError) GetCode() AckErrorCode {
+	if x != nil {
+		return x.Code
+	}
+	return AckErrorCode_ACK_ERROR_CODE_UNSPECIFIED
+}
+
+func (x *AckError) GetMessage() string {
+	if x != nil {
+		return x.Message
 	}
 	return ""
 }
 
 type AckResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Results       []*AckResult           `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *AckResponse) Reset() {
 	*x = AckResponse{}
-	mi := &file_fila_v1_service_proto_msgTypes[5]
+	mi := &file_fila_v1_service_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -293,7 +843,7 @@ func (x *AckResponse) String() string {
 func (*AckResponse) ProtoMessage() {}
 
 func (x *AckResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[5]
+	mi := &file_fila_v1_service_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -306,10 +856,18 @@ func (x *AckResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AckResponse.ProtoReflect.Descriptor instead.
 func (*AckResponse) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{5}
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{12}
 }
 
-type NackRequest struct {
+func (x *AckResponse) GetResults() []*AckResult {
+	if x != nil {
+		return x.Results
+	}
+	return nil
+}
+
+// Individual nack item.
+type NackMessage struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Queue         string                 `protobuf:"bytes,1,opt,name=queue,proto3" json:"queue,omitempty"`
 	MessageId     string                 `protobuf:"bytes,2,opt,name=message_id,json=messageId,proto3" json:"message_id,omitempty"`
@@ -318,9 +876,67 @@ type NackRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
+func (x *NackMessage) Reset() {
+	*x = NackMessage{}
+	mi := &file_fila_v1_service_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NackMessage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NackMessage) ProtoMessage() {}
+
+func (x *NackMessage) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NackMessage.ProtoReflect.Descriptor instead.
+func (*NackMessage) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *NackMessage) GetQueue() string {
+	if x != nil {
+		return x.Queue
+	}
+	return ""
+}
+
+func (x *NackMessage) GetMessageId() string {
+	if x != nil {
+		return x.MessageId
+	}
+	return ""
+}
+
+func (x *NackMessage) GetError() string {
+	if x != nil {
+		return x.Error
+	}
+	return ""
+}
+
+type NackRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Messages      []*NackMessage         `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
 func (x *NackRequest) Reset() {
 	*x = NackRequest{}
-	mi := &file_fila_v1_service_proto_msgTypes[6]
+	mi := &file_fila_v1_service_proto_msgTypes[14]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -332,7 +948,7 @@ func (x *NackRequest) String() string {
 func (*NackRequest) ProtoMessage() {}
 
 func (x *NackRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[6]
+	mi := &file_fila_v1_service_proto_msgTypes[14]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -345,39 +961,196 @@ func (x *NackRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NackRequest.ProtoReflect.Descriptor instead.
 func (*NackRequest) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{6}
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{14}
 }
 
-func (x *NackRequest) GetQueue() string {
+func (x *NackRequest) GetMessages() []*NackMessage {
 	if x != nil {
-		return x.Queue
+		return x.Messages
 	}
-	return ""
+	return nil
 }
 
-func (x *NackRequest) GetMessageId() string {
+type NackResult struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Types that are valid to be assigned to Result:
+	//
+	//	*NackResult_Success
+	//	*NackResult_Error
+	Result        isNackResult_Result `protobuf_oneof:"result"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NackResult) Reset() {
+	*x = NackResult{}
+	mi := &file_fila_v1_service_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NackResult) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NackResult) ProtoMessage() {}
+
+func (x *NackResult) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[15]
 	if x != nil {
-		return x.MessageId
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
 	}
-	return ""
+	return mi.MessageOf(x)
 }
 
-func (x *NackRequest) GetError() string {
+// Deprecated: Use NackResult.ProtoReflect.Descriptor instead.
+func (*NackResult) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *NackResult) GetResult() isNackResult_Result {
 	if x != nil {
-		return x.Error
+		return x.Result
+	}
+	return nil
+}
+
+func (x *NackResult) GetSuccess() *NackSuccess {
+	if x != nil {
+		if x, ok := x.Result.(*NackResult_Success); ok {
+			return x.Success
+		}
+	}
+	return nil
+}
+
+func (x *NackResult) GetError() *NackError {
+	if x != nil {
+		if x, ok := x.Result.(*NackResult_Error); ok {
+			return x.Error
+		}
+	}
+	return nil
+}
+
+type isNackResult_Result interface {
+	isNackResult_Result()
+}
+
+type NackResult_Success struct {
+	Success *NackSuccess `protobuf:"bytes,1,opt,name=success,proto3,oneof"`
+}
+
+type NackResult_Error struct {
+	Error *NackError `protobuf:"bytes,2,opt,name=error,proto3,oneof"`
+}
+
+func (*NackResult_Success) isNackResult_Result() {}
+
+func (*NackResult_Error) isNackResult_Result() {}
+
+type NackSuccess struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NackSuccess) Reset() {
+	*x = NackSuccess{}
+	mi := &file_fila_v1_service_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NackSuccess) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NackSuccess) ProtoMessage() {}
+
+func (x *NackSuccess) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NackSuccess.ProtoReflect.Descriptor instead.
+func (*NackSuccess) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{16}
+}
+
+type NackError struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Code          NackErrorCode          `protobuf:"varint,1,opt,name=code,proto3,enum=fila.v1.NackErrorCode" json:"code,omitempty"`
+	Message       string                 `protobuf:"bytes,2,opt,name=message,proto3" json:"message,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NackError) Reset() {
+	*x = NackError{}
+	mi := &file_fila_v1_service_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NackError) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NackError) ProtoMessage() {}
+
+func (x *NackError) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NackError.ProtoReflect.Descriptor instead.
+func (*NackError) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *NackError) GetCode() NackErrorCode {
+	if x != nil {
+		return x.Code
+	}
+	return NackErrorCode_NACK_ERROR_CODE_UNSPECIFIED
+}
+
+func (x *NackError) GetMessage() string {
+	if x != nil {
+		return x.Message
 	}
 	return ""
 }
 
 type NackResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
+	Results       []*NackResult          `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
 func (x *NackResponse) Reset() {
 	*x = NackResponse{}
-	mi := &file_fila_v1_service_proto_msgTypes[7]
+	mi := &file_fila_v1_service_proto_msgTypes[18]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -389,7 +1162,7 @@ func (x *NackResponse) String() string {
 func (*NackResponse) ProtoMessage() {}
 
 func (x *NackResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[7]
+	mi := &file_fila_v1_service_proto_msgTypes[18]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -402,123 +1175,40 @@ func (x *NackResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use NackResponse.ProtoReflect.Descriptor instead.
 func (*NackResponse) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{7}
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{18}
 }
 
-type BatchEnqueueRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Messages      []*EnqueueRequest      `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BatchEnqueueRequest) Reset() {
-	*x = BatchEnqueueRequest{}
-	mi := &file_fila_v1_service_proto_msgTypes[8]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BatchEnqueueRequest) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BatchEnqueueRequest) ProtoMessage() {}
-
-func (x *BatchEnqueueRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[8]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BatchEnqueueRequest.ProtoReflect.Descriptor instead.
-func (*BatchEnqueueRequest) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{8}
-}
-
-func (x *BatchEnqueueRequest) GetMessages() []*EnqueueRequest {
-	if x != nil {
-		return x.Messages
-	}
-	return nil
-}
-
-type BatchEnqueueResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Results       []*BatchEnqueueResult  `protobuf:"bytes,1,rep,name=results,proto3" json:"results,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *BatchEnqueueResponse) Reset() {
-	*x = BatchEnqueueResponse{}
-	mi := &file_fila_v1_service_proto_msgTypes[9]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *BatchEnqueueResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*BatchEnqueueResponse) ProtoMessage() {}
-
-func (x *BatchEnqueueResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[9]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use BatchEnqueueResponse.ProtoReflect.Descriptor instead.
-func (*BatchEnqueueResponse) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{9}
-}
-
-func (x *BatchEnqueueResponse) GetResults() []*BatchEnqueueResult {
+func (x *NackResponse) GetResults() []*NackResult {
 	if x != nil {
 		return x.Results
 	}
 	return nil
 }
 
-type BatchEnqueueResult struct {
-	state protoimpl.MessageState `protogen:"open.v1"`
-	// Types that are valid to be assigned to Result:
-	//
-	//	*BatchEnqueueResult_Success
-	//	*BatchEnqueueResult_Error
-	Result        isBatchEnqueueResult_Result `protobuf_oneof:"result"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+// Stream enqueue — per-write batch with sequence tracking.
+type StreamEnqueueRequest struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Messages       []*EnqueueMessage      `protobuf:"bytes,1,rep,name=messages,proto3" json:"messages,omitempty"`
+	SequenceNumber uint64                 `protobuf:"varint,2,opt,name=sequence_number,json=sequenceNumber,proto3" json:"sequence_number,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
-func (x *BatchEnqueueResult) Reset() {
-	*x = BatchEnqueueResult{}
-	mi := &file_fila_v1_service_proto_msgTypes[10]
+func (x *StreamEnqueueRequest) Reset() {
+	*x = StreamEnqueueRequest{}
+	mi := &file_fila_v1_service_proto_msgTypes[19]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *BatchEnqueueResult) String() string {
+func (x *StreamEnqueueRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*BatchEnqueueResult) ProtoMessage() {}
+func (*StreamEnqueueRequest) ProtoMessage() {}
 
-func (x *BatchEnqueueResult) ProtoReflect() protoreflect.Message {
-	mi := &file_fila_v1_service_proto_msgTypes[10]
+func (x *StreamEnqueueRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[19]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -529,95 +1219,167 @@ func (x *BatchEnqueueResult) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use BatchEnqueueResult.ProtoReflect.Descriptor instead.
-func (*BatchEnqueueResult) Descriptor() ([]byte, []int) {
-	return file_fila_v1_service_proto_rawDescGZIP(), []int{10}
+// Deprecated: Use StreamEnqueueRequest.ProtoReflect.Descriptor instead.
+func (*StreamEnqueueRequest) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{19}
 }
 
-func (x *BatchEnqueueResult) GetResult() isBatchEnqueueResult_Result {
+func (x *StreamEnqueueRequest) GetMessages() []*EnqueueMessage {
 	if x != nil {
-		return x.Result
+		return x.Messages
 	}
 	return nil
 }
 
-func (x *BatchEnqueueResult) GetSuccess() *EnqueueResponse {
+func (x *StreamEnqueueRequest) GetSequenceNumber() uint64 {
 	if x != nil {
-		if x, ok := x.Result.(*BatchEnqueueResult_Success); ok {
-			return x.Success
+		return x.SequenceNumber
+	}
+	return 0
+}
+
+type StreamEnqueueResponse struct {
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	SequenceNumber uint64                 `protobuf:"varint,1,opt,name=sequence_number,json=sequenceNumber,proto3" json:"sequence_number,omitempty"`
+	Results        []*EnqueueResult       `protobuf:"bytes,2,rep,name=results,proto3" json:"results,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
+}
+
+func (x *StreamEnqueueResponse) Reset() {
+	*x = StreamEnqueueResponse{}
+	mi := &file_fila_v1_service_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *StreamEnqueueResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*StreamEnqueueResponse) ProtoMessage() {}
+
+func (x *StreamEnqueueResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_fila_v1_service_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
 		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use StreamEnqueueResponse.ProtoReflect.Descriptor instead.
+func (*StreamEnqueueResponse) Descriptor() ([]byte, []int) {
+	return file_fila_v1_service_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *StreamEnqueueResponse) GetSequenceNumber() uint64 {
+	if x != nil {
+		return x.SequenceNumber
+	}
+	return 0
+}
+
+func (x *StreamEnqueueResponse) GetResults() []*EnqueueResult {
+	if x != nil {
+		return x.Results
 	}
 	return nil
 }
-
-func (x *BatchEnqueueResult) GetError() string {
-	if x != nil {
-		if x, ok := x.Result.(*BatchEnqueueResult_Error); ok {
-			return x.Error
-		}
-	}
-	return ""
-}
-
-type isBatchEnqueueResult_Result interface {
-	isBatchEnqueueResult_Result()
-}
-
-type BatchEnqueueResult_Success struct {
-	Success *EnqueueResponse `protobuf:"bytes,1,opt,name=success,proto3,oneof"`
-}
-
-type BatchEnqueueResult_Error struct {
-	Error string `protobuf:"bytes,2,opt,name=error,proto3,oneof"`
-}
-
-func (*BatchEnqueueResult_Success) isBatchEnqueueResult_Result() {}
-
-func (*BatchEnqueueResult_Error) isBatchEnqueueResult_Result() {}
 
 var File_fila_v1_service_proto protoreflect.FileDescriptor
 
 const file_fila_v1_service_proto_rawDesc = "" +
 	"\n" +
 	"\x15fila/v1/service.proto\x12\afila.v1\x1a\x16fila/v1/messages.proto\"\xbc\x01\n" +
-	"\x0eEnqueueRequest\x12\x14\n" +
+	"\x0eEnqueueMessage\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12>\n" +
-	"\aheaders\x18\x02 \x03(\v2$.fila.v1.EnqueueRequest.HeadersEntryR\aheaders\x12\x18\n" +
+	"\aheaders\x18\x02 \x03(\v2$.fila.v1.EnqueueMessage.HeadersEntryR\aheaders\x12\x18\n" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"0\n" +
-	"\x0fEnqueueResponse\x12\x1d\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"E\n" +
+	"\x0eEnqueueRequest\x123\n" +
+	"\bmessages\x18\x01 \x03(\v2\x17.fila.v1.EnqueueMessageR\bmessages\"i\n" +
+	"\rEnqueueResult\x12\x1f\n" +
 	"\n" +
-	"message_id\x18\x01 \x01(\tR\tmessageId\"&\n" +
+	"message_id\x18\x01 \x01(\tH\x00R\tmessageId\x12-\n" +
+	"\x05error\x18\x02 \x01(\v2\x15.fila.v1.EnqueueErrorH\x00R\x05errorB\b\n" +
+	"\x06result\"W\n" +
+	"\fEnqueueError\x12-\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x19.fila.v1.EnqueueErrorCodeR\x04code\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"C\n" +
+	"\x0fEnqueueResponse\x120\n" +
+	"\aresults\x18\x01 \x03(\v2\x16.fila.v1.EnqueueResultR\aresults\"&\n" +
 	"\x0eConsumeRequest\x12\x14\n" +
-	"\x05queue\x18\x01 \x01(\tR\x05queue\"k\n" +
-	"\x0fConsumeResponse\x12*\n" +
-	"\amessage\x18\x01 \x01(\v2\x10.fila.v1.MessageR\amessage\x12,\n" +
-	"\bmessages\x18\x02 \x03(\v2\x10.fila.v1.MessageR\bmessages\"A\n" +
+	"\x05queue\x18\x01 \x01(\tR\x05queue\"?\n" +
+	"\x0fConsumeResponse\x12,\n" +
+	"\bmessages\x18\x01 \x03(\v2\x10.fila.v1.MessageR\bmessages\"A\n" +
 	"\n" +
-	"AckRequest\x12\x14\n" +
+	"AckMessage\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x02 \x01(\tR\tmessageId\"\r\n" +
-	"\vAckResponse\"X\n" +
-	"\vNackRequest\x12\x14\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\"=\n" +
+	"\n" +
+	"AckRequest\x12/\n" +
+	"\bmessages\x18\x01 \x03(\v2\x13.fila.v1.AckMessageR\bmessages\"q\n" +
+	"\tAckResult\x12/\n" +
+	"\asuccess\x18\x01 \x01(\v2\x13.fila.v1.AckSuccessH\x00R\asuccess\x12)\n" +
+	"\x05error\x18\x02 \x01(\v2\x11.fila.v1.AckErrorH\x00R\x05errorB\b\n" +
+	"\x06result\"\f\n" +
+	"\n" +
+	"AckSuccess\"O\n" +
+	"\bAckError\x12)\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x15.fila.v1.AckErrorCodeR\x04code\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\";\n" +
+	"\vAckResponse\x12,\n" +
+	"\aresults\x18\x01 \x03(\v2\x12.fila.v1.AckResultR\aresults\"X\n" +
+	"\vNackMessage\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x02 \x01(\tR\tmessageId\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"\x0e\n" +
-	"\fNackResponse\"J\n" +
-	"\x13BatchEnqueueRequest\x123\n" +
-	"\bmessages\x18\x01 \x03(\v2\x17.fila.v1.EnqueueRequestR\bmessages\"M\n" +
-	"\x14BatchEnqueueResponse\x125\n" +
-	"\aresults\x18\x01 \x03(\v2\x1b.fila.v1.BatchEnqueueResultR\aresults\"l\n" +
-	"\x12BatchEnqueueResult\x124\n" +
-	"\asuccess\x18\x01 \x01(\v2\x18.fila.v1.EnqueueResponseH\x00R\asuccess\x12\x16\n" +
-	"\x05error\x18\x02 \x01(\tH\x00R\x05errorB\b\n" +
-	"\x06result2\xbf\x02\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"?\n" +
+	"\vNackRequest\x120\n" +
+	"\bmessages\x18\x01 \x03(\v2\x14.fila.v1.NackMessageR\bmessages\"t\n" +
+	"\n" +
+	"NackResult\x120\n" +
+	"\asuccess\x18\x01 \x01(\v2\x14.fila.v1.NackSuccessH\x00R\asuccess\x12*\n" +
+	"\x05error\x18\x02 \x01(\v2\x12.fila.v1.NackErrorH\x00R\x05errorB\b\n" +
+	"\x06result\"\r\n" +
+	"\vNackSuccess\"Q\n" +
+	"\tNackError\x12*\n" +
+	"\x04code\x18\x01 \x01(\x0e2\x16.fila.v1.NackErrorCodeR\x04code\x12\x18\n" +
+	"\amessage\x18\x02 \x01(\tR\amessage\"=\n" +
+	"\fNackResponse\x12-\n" +
+	"\aresults\x18\x01 \x03(\v2\x13.fila.v1.NackResultR\aresults\"t\n" +
+	"\x14StreamEnqueueRequest\x123\n" +
+	"\bmessages\x18\x01 \x03(\v2\x17.fila.v1.EnqueueMessageR\bmessages\x12'\n" +
+	"\x0fsequence_number\x18\x02 \x01(\x04R\x0esequenceNumber\"r\n" +
+	"\x15StreamEnqueueResponse\x12'\n" +
+	"\x0fsequence_number\x18\x01 \x01(\x04R\x0esequenceNumber\x120\n" +
+	"\aresults\x18\x02 \x03(\v2\x16.fila.v1.EnqueueResultR\aresults*\xc4\x01\n" +
+	"\x10EnqueueErrorCode\x12\"\n" +
+	"\x1eENQUEUE_ERROR_CODE_UNSPECIFIED\x10\x00\x12&\n" +
+	"\"ENQUEUE_ERROR_CODE_QUEUE_NOT_FOUND\x10\x01\x12\x1e\n" +
+	"\x1aENQUEUE_ERROR_CODE_STORAGE\x10\x02\x12\x1a\n" +
+	"\x16ENQUEUE_ERROR_CODE_LUA\x10\x03\x12(\n" +
+	"$ENQUEUE_ERROR_CODE_PERMISSION_DENIED\x10\x04*\x96\x01\n" +
+	"\fAckErrorCode\x12\x1e\n" +
+	"\x1aACK_ERROR_CODE_UNSPECIFIED\x10\x00\x12$\n" +
+	" ACK_ERROR_CODE_MESSAGE_NOT_FOUND\x10\x01\x12\x1a\n" +
+	"\x16ACK_ERROR_CODE_STORAGE\x10\x02\x12$\n" +
+	" ACK_ERROR_CODE_PERMISSION_DENIED\x10\x03*\x9b\x01\n" +
+	"\rNackErrorCode\x12\x1f\n" +
+	"\x1bNACK_ERROR_CODE_UNSPECIFIED\x10\x00\x12%\n" +
+	"!NACK_ERROR_CODE_MESSAGE_NOT_FOUND\x10\x01\x12\x1b\n" +
+	"\x17NACK_ERROR_CODE_STORAGE\x10\x02\x12%\n" +
+	"!NACK_ERROR_CODE_PERMISSION_DENIED\x10\x032\xc6\x02\n" +
 	"\vFilaService\x12<\n" +
-	"\aEnqueue\x12\x17.fila.v1.EnqueueRequest\x1a\x18.fila.v1.EnqueueResponse\x12K\n" +
-	"\fBatchEnqueue\x12\x1c.fila.v1.BatchEnqueueRequest\x1a\x1d.fila.v1.BatchEnqueueResponse\x12>\n" +
+	"\aEnqueue\x12\x17.fila.v1.EnqueueRequest\x1a\x18.fila.v1.EnqueueResponse\x12R\n" +
+	"\rStreamEnqueue\x12\x1d.fila.v1.StreamEnqueueRequest\x1a\x1e.fila.v1.StreamEnqueueResponse(\x010\x01\x12>\n" +
 	"\aConsume\x12\x17.fila.v1.ConsumeRequest\x1a\x18.fila.v1.ConsumeResponse0\x01\x120\n" +
 	"\x03Ack\x12\x13.fila.v1.AckRequest\x1a\x14.fila.v1.AckResponse\x123\n" +
 	"\x04Nack\x12\x14.fila.v1.NackRequest\x1a\x15.fila.v1.NackResponseB\"Z github.com/faisca/fila-go/filav1b\x06proto3"
@@ -634,44 +1396,70 @@ func file_fila_v1_service_proto_rawDescGZIP() []byte {
 	return file_fila_v1_service_proto_rawDescData
 }
 
-var file_fila_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_fila_v1_service_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
+var file_fila_v1_service_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_fila_v1_service_proto_goTypes = []any{
-	(*EnqueueRequest)(nil),       // 0: fila.v1.EnqueueRequest
-	(*EnqueueResponse)(nil),      // 1: fila.v1.EnqueueResponse
-	(*ConsumeRequest)(nil),       // 2: fila.v1.ConsumeRequest
-	(*ConsumeResponse)(nil),      // 3: fila.v1.ConsumeResponse
-	(*AckRequest)(nil),           // 4: fila.v1.AckRequest
-	(*AckResponse)(nil),          // 5: fila.v1.AckResponse
-	(*NackRequest)(nil),          // 6: fila.v1.NackRequest
-	(*NackResponse)(nil),         // 7: fila.v1.NackResponse
-	(*BatchEnqueueRequest)(nil),  // 8: fila.v1.BatchEnqueueRequest
-	(*BatchEnqueueResponse)(nil), // 9: fila.v1.BatchEnqueueResponse
-	(*BatchEnqueueResult)(nil),   // 10: fila.v1.BatchEnqueueResult
-	nil,                          // 11: fila.v1.EnqueueRequest.HeadersEntry
-	(*Message)(nil),              // 12: fila.v1.Message
+	(EnqueueErrorCode)(0),         // 0: fila.v1.EnqueueErrorCode
+	(AckErrorCode)(0),             // 1: fila.v1.AckErrorCode
+	(NackErrorCode)(0),            // 2: fila.v1.NackErrorCode
+	(*EnqueueMessage)(nil),        // 3: fila.v1.EnqueueMessage
+	(*EnqueueRequest)(nil),        // 4: fila.v1.EnqueueRequest
+	(*EnqueueResult)(nil),         // 5: fila.v1.EnqueueResult
+	(*EnqueueError)(nil),          // 6: fila.v1.EnqueueError
+	(*EnqueueResponse)(nil),       // 7: fila.v1.EnqueueResponse
+	(*ConsumeRequest)(nil),        // 8: fila.v1.ConsumeRequest
+	(*ConsumeResponse)(nil),       // 9: fila.v1.ConsumeResponse
+	(*AckMessage)(nil),            // 10: fila.v1.AckMessage
+	(*AckRequest)(nil),            // 11: fila.v1.AckRequest
+	(*AckResult)(nil),             // 12: fila.v1.AckResult
+	(*AckSuccess)(nil),            // 13: fila.v1.AckSuccess
+	(*AckError)(nil),              // 14: fila.v1.AckError
+	(*AckResponse)(nil),           // 15: fila.v1.AckResponse
+	(*NackMessage)(nil),           // 16: fila.v1.NackMessage
+	(*NackRequest)(nil),           // 17: fila.v1.NackRequest
+	(*NackResult)(nil),            // 18: fila.v1.NackResult
+	(*NackSuccess)(nil),           // 19: fila.v1.NackSuccess
+	(*NackError)(nil),             // 20: fila.v1.NackError
+	(*NackResponse)(nil),          // 21: fila.v1.NackResponse
+	(*StreamEnqueueRequest)(nil),  // 22: fila.v1.StreamEnqueueRequest
+	(*StreamEnqueueResponse)(nil), // 23: fila.v1.StreamEnqueueResponse
+	nil,                           // 24: fila.v1.EnqueueMessage.HeadersEntry
+	(*Message)(nil),               // 25: fila.v1.Message
 }
 var file_fila_v1_service_proto_depIdxs = []int32{
-	11, // 0: fila.v1.EnqueueRequest.headers:type_name -> fila.v1.EnqueueRequest.HeadersEntry
-	12, // 1: fila.v1.ConsumeResponse.message:type_name -> fila.v1.Message
-	12, // 2: fila.v1.ConsumeResponse.messages:type_name -> fila.v1.Message
-	0,  // 3: fila.v1.BatchEnqueueRequest.messages:type_name -> fila.v1.EnqueueRequest
-	10, // 4: fila.v1.BatchEnqueueResponse.results:type_name -> fila.v1.BatchEnqueueResult
-	1,  // 5: fila.v1.BatchEnqueueResult.success:type_name -> fila.v1.EnqueueResponse
-	0,  // 6: fila.v1.FilaService.Enqueue:input_type -> fila.v1.EnqueueRequest
-	8,  // 7: fila.v1.FilaService.BatchEnqueue:input_type -> fila.v1.BatchEnqueueRequest
-	2,  // 8: fila.v1.FilaService.Consume:input_type -> fila.v1.ConsumeRequest
-	4,  // 9: fila.v1.FilaService.Ack:input_type -> fila.v1.AckRequest
-	6,  // 10: fila.v1.FilaService.Nack:input_type -> fila.v1.NackRequest
-	1,  // 11: fila.v1.FilaService.Enqueue:output_type -> fila.v1.EnqueueResponse
-	9,  // 12: fila.v1.FilaService.BatchEnqueue:output_type -> fila.v1.BatchEnqueueResponse
-	3,  // 13: fila.v1.FilaService.Consume:output_type -> fila.v1.ConsumeResponse
-	5,  // 14: fila.v1.FilaService.Ack:output_type -> fila.v1.AckResponse
-	7,  // 15: fila.v1.FilaService.Nack:output_type -> fila.v1.NackResponse
-	11, // [11:16] is the sub-list for method output_type
-	6,  // [6:11] is the sub-list for method input_type
-	6,  // [6:6] is the sub-list for extension type_name
-	6,  // [6:6] is the sub-list for extension extendee
-	0,  // [0:6] is the sub-list for field type_name
+	24, // 0: fila.v1.EnqueueMessage.headers:type_name -> fila.v1.EnqueueMessage.HeadersEntry
+	3,  // 1: fila.v1.EnqueueRequest.messages:type_name -> fila.v1.EnqueueMessage
+	6,  // 2: fila.v1.EnqueueResult.error:type_name -> fila.v1.EnqueueError
+	0,  // 3: fila.v1.EnqueueError.code:type_name -> fila.v1.EnqueueErrorCode
+	5,  // 4: fila.v1.EnqueueResponse.results:type_name -> fila.v1.EnqueueResult
+	25, // 5: fila.v1.ConsumeResponse.messages:type_name -> fila.v1.Message
+	10, // 6: fila.v1.AckRequest.messages:type_name -> fila.v1.AckMessage
+	13, // 7: fila.v1.AckResult.success:type_name -> fila.v1.AckSuccess
+	14, // 8: fila.v1.AckResult.error:type_name -> fila.v1.AckError
+	1,  // 9: fila.v1.AckError.code:type_name -> fila.v1.AckErrorCode
+	12, // 10: fila.v1.AckResponse.results:type_name -> fila.v1.AckResult
+	16, // 11: fila.v1.NackRequest.messages:type_name -> fila.v1.NackMessage
+	19, // 12: fila.v1.NackResult.success:type_name -> fila.v1.NackSuccess
+	20, // 13: fila.v1.NackResult.error:type_name -> fila.v1.NackError
+	2,  // 14: fila.v1.NackError.code:type_name -> fila.v1.NackErrorCode
+	18, // 15: fila.v1.NackResponse.results:type_name -> fila.v1.NackResult
+	3,  // 16: fila.v1.StreamEnqueueRequest.messages:type_name -> fila.v1.EnqueueMessage
+	5,  // 17: fila.v1.StreamEnqueueResponse.results:type_name -> fila.v1.EnqueueResult
+	4,  // 18: fila.v1.FilaService.Enqueue:input_type -> fila.v1.EnqueueRequest
+	22, // 19: fila.v1.FilaService.StreamEnqueue:input_type -> fila.v1.StreamEnqueueRequest
+	8,  // 20: fila.v1.FilaService.Consume:input_type -> fila.v1.ConsumeRequest
+	11, // 21: fila.v1.FilaService.Ack:input_type -> fila.v1.AckRequest
+	17, // 22: fila.v1.FilaService.Nack:input_type -> fila.v1.NackRequest
+	7,  // 23: fila.v1.FilaService.Enqueue:output_type -> fila.v1.EnqueueResponse
+	23, // 24: fila.v1.FilaService.StreamEnqueue:output_type -> fila.v1.StreamEnqueueResponse
+	9,  // 25: fila.v1.FilaService.Consume:output_type -> fila.v1.ConsumeResponse
+	15, // 26: fila.v1.FilaService.Ack:output_type -> fila.v1.AckResponse
+	21, // 27: fila.v1.FilaService.Nack:output_type -> fila.v1.NackResponse
+	23, // [23:28] is the sub-list for method output_type
+	18, // [18:23] is the sub-list for method input_type
+	18, // [18:18] is the sub-list for extension type_name
+	18, // [18:18] is the sub-list for extension extendee
+	0,  // [0:18] is the sub-list for field type_name
 }
 
 func init() { file_fila_v1_service_proto_init() }
@@ -680,22 +1468,31 @@ func file_fila_v1_service_proto_init() {
 		return
 	}
 	file_fila_v1_messages_proto_init()
-	file_fila_v1_service_proto_msgTypes[10].OneofWrappers = []any{
-		(*BatchEnqueueResult_Success)(nil),
-		(*BatchEnqueueResult_Error)(nil),
+	file_fila_v1_service_proto_msgTypes[2].OneofWrappers = []any{
+		(*EnqueueResult_MessageId)(nil),
+		(*EnqueueResult_Error)(nil),
+	}
+	file_fila_v1_service_proto_msgTypes[9].OneofWrappers = []any{
+		(*AckResult_Success)(nil),
+		(*AckResult_Error)(nil),
+	}
+	file_fila_v1_service_proto_msgTypes[15].OneofWrappers = []any{
+		(*NackResult_Success)(nil),
+		(*NackResult_Error)(nil),
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_fila_v1_service_proto_rawDesc), len(file_fila_v1_service_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   12,
+			NumEnums:      3,
+			NumMessages:   22,
 			NumExtensions: 0,
 			NumServices:   1,
 		},
 		GoTypes:           file_fila_v1_service_proto_goTypes,
 		DependencyIndexes: file_fila_v1_service_proto_depIdxs,
+		EnumInfos:         file_fila_v1_service_proto_enumTypes,
 		MessageInfos:      file_fila_v1_service_proto_msgTypes,
 	}.Build()
 	File_fila_v1_service_proto = out.File
