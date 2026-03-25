@@ -9,6 +9,10 @@ import (
 	filav1 "github.com/faisca/fila-go/filav1"
 )
 
+// maxAutoBatchSize caps the number of items drained in a single auto-mode
+// batch to avoid exceeding gRPC's default 4 MB max message size.
+const maxAutoBatchSize = 1000
+
 // AccumulatorMode controls how Enqueue() accumulates messages internally.
 type AccumulatorMode interface {
 	isAccumulatorMode()
@@ -117,9 +121,10 @@ func (a *accumulator) runAuto() {
 
 		batch := []*accumulatorItem{first}
 
-		// Non-blocking drain of anything else already in the channel.
+		// Non-blocking drain of anything else already in the channel,
+		// capped at maxAutoBatchSize to avoid exceeding gRPC message limits.
 	drain:
-		for {
+		for len(batch) < maxAutoBatchSize {
 			select {
 			case item := <-a.ch:
 				batch = append(batch, item)

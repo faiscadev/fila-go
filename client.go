@@ -187,7 +187,12 @@ func Dial(addr string, opts ...DialOption) (*Client, error) {
 	}
 
 	// Start accumulator unless disabled.
-	if _, disabled := accMode.(AccumulatorModeDisabled); !disabled {
+	disabled := false
+	switch accMode.(type) {
+	case AccumulatorModeDisabled, *AccumulatorModeDisabled:
+		disabled = true
+	}
+	if !disabled {
 		c.accumulator = newAccumulator(svc, accMode)
 	}
 

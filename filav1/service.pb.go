@@ -1301,9 +1301,9 @@ const file_fila_v1_service_proto_rawDesc = "" +
 	"\apayload\x18\x03 \x01(\fR\apayload\x1a:\n" +
 	"\fHeadersEntry\x12\x10\n" +
 	"\x03key\x18\x01 \x01(\tR\x03key\x12\x14\n" +
-	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"E\n" +
+	"\x05value\x18\x02 \x01(\tR\x05value:\x028\x01\"Q\n" +
 	"\x0eEnqueueRequest\x123\n" +
-	"\bmessages\x18\x01 \x03(\v2\x17.fila.v1.EnqueueMessageR\bmessages\"i\n" +
+	"\bmessages\x18\x01 \x03(\v2\x17.fila.v1.EnqueueMessageR\bmessagesJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"i\n" +
 	"\rEnqueueResult\x12\x1f\n" +
 	"\n" +
 	"message_id\x18\x01 \x01(\tH\x00R\tmessageId\x12-\n" +
@@ -1315,17 +1315,17 @@ const file_fila_v1_service_proto_rawDesc = "" +
 	"\x0fEnqueueResponse\x120\n" +
 	"\aresults\x18\x01 \x03(\v2\x16.fila.v1.EnqueueResultR\aresults\"&\n" +
 	"\x0eConsumeRequest\x12\x14\n" +
-	"\x05queue\x18\x01 \x01(\tR\x05queue\"?\n" +
+	"\x05queue\x18\x01 \x01(\tR\x05queue\"E\n" +
 	"\x0fConsumeResponse\x12,\n" +
-	"\bmessages\x18\x01 \x03(\v2\x10.fila.v1.MessageR\bmessages\"A\n" +
+	"\bmessages\x18\x01 \x03(\v2\x10.fila.v1.MessageR\bmessagesJ\x04\b\x02\x10\x03\"A\n" +
 	"\n" +
 	"AckMessage\x12\x14\n" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x1d\n" +
 	"\n" +
-	"message_id\x18\x02 \x01(\tR\tmessageId\"=\n" +
+	"message_id\x18\x02 \x01(\tR\tmessageId\"C\n" +
 	"\n" +
 	"AckRequest\x12/\n" +
-	"\bmessages\x18\x01 \x03(\v2\x13.fila.v1.AckMessageR\bmessages\"q\n" +
+	"\bmessages\x18\x01 \x03(\v2\x13.fila.v1.AckMessageR\bmessagesJ\x04\b\x02\x10\x03\"q\n" +
 	"\tAckResult\x12/\n" +
 	"\asuccess\x18\x01 \x01(\v2\x13.fila.v1.AckSuccessH\x00R\asuccess\x12)\n" +
 	"\x05error\x18\x02 \x01(\v2\x11.fila.v1.AckErrorH\x00R\x05errorB\b\n" +
@@ -1341,9 +1341,9 @@ const file_fila_v1_service_proto_rawDesc = "" +
 	"\x05queue\x18\x01 \x01(\tR\x05queue\x12\x1d\n" +
 	"\n" +
 	"message_id\x18\x02 \x01(\tR\tmessageId\x12\x14\n" +
-	"\x05error\x18\x03 \x01(\tR\x05error\"?\n" +
+	"\x05error\x18\x03 \x01(\tR\x05error\"K\n" +
 	"\vNackRequest\x120\n" +
-	"\bmessages\x18\x01 \x03(\v2\x14.fila.v1.NackMessageR\bmessages\"t\n" +
+	"\bmessages\x18\x01 \x03(\v2\x14.fila.v1.NackMessageR\bmessagesJ\x04\b\x02\x10\x03J\x04\b\x03\x10\x04\"t\n" +
 	"\n" +
 	"NackResult\x120\n" +
 	"\asuccess\x18\x01 \x01(\v2\x14.fila.v1.NackSuccessH\x00R\asuccess\x12*\n" +

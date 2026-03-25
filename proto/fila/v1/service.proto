@@ -24,6 +24,7 @@ message EnqueueMessage {
 // Enqueue one or more messages.
 message EnqueueRequest {
   repeated EnqueueMessage messages = 1;
+  reserved 2, 3; // Previously: string queue = 2, bytes payload = 3 (pre-unification).
 }
 
 // Per-message enqueue result.
@@ -59,6 +60,7 @@ message ConsumeRequest {
 
 message ConsumeResponse {
   repeated Message messages = 1;
+  reserved 2; // Previously: repeated Message messages = 2 (pre-unification batch field).
 }
 
 // Individual ack item.
@@ -69,6 +71,7 @@ message AckMessage {
 
 message AckRequest {
   repeated AckMessage messages = 1;
+  reserved 2; // Previously: string message_id = 2 (pre-unification).
 }
 
 message AckResult {
@@ -105,6 +108,7 @@ message NackMessage {
 
 message NackRequest {
   repeated NackMessage messages = 1;
+  reserved 2, 3; // Previously: string message_id = 2, string error = 3 (pre-unification).
 }
 
 message NackResult {
