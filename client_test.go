@@ -12,9 +12,6 @@ import (
 	"time"
 
 	fila "github.com/faisca/fila-go"
-	filav1 "github.com/faisca/fila-go/filav1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 // testServer manages a fila-server subprocess for integration tests.
@@ -88,35 +85,31 @@ func startTestServer(t *testing.T) *testServer {
 		dataDir: dataDir,
 	}
 
-	// Wait for server to be ready by polling the gRPC endpoint.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
-	for {
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err == nil {
-			// Try a lightweight RPC to verify the server is responding.
-			adminClient := filav1.NewFilaAdminClient(conn)
-			_, listErr := adminClient.ListQueues(ctx, &filav1.ListQueuesRequest{})
-			conn.Close()
-			if listErr == nil {
-				break
-			}
-		}
-
-		select {
-		case <-ctx.Done():
-			ts.stop()
-			t.Fatalf("fila-server did not become ready within 10s")
-		case <-time.After(50 * time.Millisecond):
-		}
-	}
+	// Wait for server to be ready by polling the FIBP endpoint.
+	waitForFIBP(t, addr, 10*time.Second)
 
 	t.Cleanup(func() {
 		ts.stop()
 	})
 
 	return ts
+}
+
+// waitForFIBP polls addr until a successful FIBP handshake completes or
+// the timeout is reached. It does not authenticate; a plain connection
+// is sufficient to confirm the server is up.
+func waitForFIBP(t *testing.T, addr string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		client, err := fila.Dial(addr)
+		if err == nil {
+			client.Close()
+			return
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	t.Fatalf("fila-server did not become ready within %s", timeout)
 }
 
 func (ts *testServer) stop() {
@@ -127,24 +120,20 @@ func (ts *testServer) stop() {
 	os.RemoveAll(ts.dataDir)
 }
 
-// createQueue creates a queue on the test server using the admin gRPC client.
+// createQueue creates a queue on the test server using the FIBP admin client.
 func createQueue(t *testing.T, addr, name string) {
 	t.Helper()
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	client, err := fila.Dial(addr)
 	if err != nil {
 		t.Fatalf("failed to connect for admin: %v", err)
 	}
-	defer conn.Close()
+	defer client.Close()
 
-	adminClient := filav1.NewFilaAdminClient(conn)
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+	_ = ctx
 
-	_, err = adminClient.CreateQueue(ctx, &filav1.CreateQueueRequest{
-		Name:   name,
-		Config: &filav1.QueueConfig{},
-	})
-	if err != nil {
+	if err := client.Admin().CreateQueue(name, nil); err != nil {
 		t.Fatalf("failed to create queue %q: %v", name, err)
 	}
 }

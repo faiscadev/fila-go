@@ -2,6 +2,9 @@
 
 Go client SDK for the [Fila](https://github.com/faisca/fila) message broker.
 
+Communicates over **FIBP** (Fila Binary Protocol) — a length-prefixed binary
+framing protocol over raw TCP. No gRPC dependency.
+
 ## Installation
 
 ```bash
@@ -127,15 +130,15 @@ client, err := fila.Dial("localhost:5555",
 
 ### `fila.Dial(addr string, opts ...DialOption) (*Client, error)`
 
-Connect to a Fila broker. Connection is established lazily on the first RPC call.
+Connect to a Fila broker. The TCP connection and FIBP handshake are performed
+eagerly during Dial.
 
 ### Options
 
 - `fila.WithTLS()` — Enable TLS using the system's default root CA pool
 - `fila.WithTLSCACert(caCertPEM []byte)` — Enable TLS with a custom CA certificate for verifying the server
 - `fila.WithTLSClientCert(certPEM, keyPEM []byte)` — Client certificate and key for mTLS (requires `WithTLS` or `WithTLSCACert`)
-- `fila.WithAPIKey(key string)` — API key sent as `Bearer` token on every RPC
-- `fila.WithGRPCDialOption(opt grpc.DialOption)` — Raw gRPC dial option for advanced configuration
+- `fila.WithAPIKey(key string)` — API key sent as a FIBP AUTH frame immediately after the handshake
 
 ### `client.Enqueue(ctx, queue, headers, payload) (string, error)`
 
@@ -152,6 +155,10 @@ Acknowledge a successfully processed message. The message is permanently removed
 ### `client.Nack(ctx, queue, msgID, errMsg) error`
 
 Negatively acknowledge a failed message. The message is requeued or routed to the dead-letter queue based on the queue's configuration.
+
+### `client.Admin() *AdminClient`
+
+Returns an admin client for queue management operations (create, delete, list).
 
 ## Error Handling
 

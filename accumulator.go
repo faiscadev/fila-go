@@ -5,12 +5,10 @@ import (
 	"fmt"
 	"sync"
 	"time"
-
-	filav1 "github.com/faisca/fila-go/filav1"
 )
 
 // maxAutoBatchSize caps the number of items drained in a single auto-mode
-// batch to avoid exceeding gRPC's default 4 MB max message size.
+// batch to avoid producing excessively large FIBP frames.
 const maxAutoBatchSize = 1000
 
 // AccumulatorMode controls how Enqueue() accumulates messages internally.
@@ -41,7 +39,7 @@ type AccumulatorModeLinger struct {
 func (AccumulatorModeLinger) isAccumulatorMode() {}
 
 // AccumulatorModeDisabled disables accumulation entirely. Each Enqueue() call
-// makes a direct gRPC RPC.
+// makes a direct FIBP request.
 type AccumulatorModeDisabled struct{}
 
 func (AccumulatorModeDisabled) isAccumulatorMode() {}
@@ -74,7 +72,7 @@ type accumulatorResult struct {
 // accumulator manages the background goroutine that collects and flushes
 // enqueue requests according to the configured AccumulatorMode.
 type accumulator struct {
-	svc  filav1.FilaServiceClient
+	c    *conn
 	mode AccumulatorMode
 	ch   chan *accumulatorItem
 
@@ -82,9 +80,9 @@ type accumulator struct {
 	stopCh chan struct{}
 }
 
-func newAccumulator(svc filav1.FilaServiceClient, mode AccumulatorMode) *accumulator {
+func newAccumulator(c *conn, mode AccumulatorMode) *accumulator {
 	a := &accumulator{
-		svc:    svc,
+		c:      c,
 		mode:   mode,
 		ch:     make(chan *accumulatorItem, 4096),
 		stopCh: make(chan struct{}),
@@ -122,7 +120,7 @@ func (a *accumulator) runAuto() {
 		batch := []*accumulatorItem{first}
 
 		// Non-blocking drain of anything else already in the channel,
-		// capped at maxAutoBatchSize to avoid exceeding gRPC message limits.
+		// capped at maxAutoBatchSize to avoid oversized frames.
 	drain:
 		for len(batch) < maxAutoBatchSize {
 			select {
@@ -186,47 +184,35 @@ func (a *accumulator) runLinger(m AccumulatorModeLinger) {
 	}
 }
 
-// flush sends accumulated enqueue requests to the server using the
-// unified Enqueue RPC (which accepts repeated messages).
+// flush sends accumulated enqueue requests to the server using the FIBP
+// enqueue operation (which accepts repeated messages per queue).
 func (a *accumulator) flush(items []*accumulatorItem) {
-	msgs := make([]*filav1.EnqueueMessage, len(items))
+	msgs := make([]EnqueueMessage, len(items))
 	for i, item := range items {
-		msgs[i] = &filav1.EnqueueMessage{
-			Queue:   item.msg.Queue,
-			Headers: item.msg.Headers,
-			Payload: item.msg.Payload,
-		}
+		msgs[i] = item.msg
 	}
 
-	// Use the first item's context for the RPC. If any individual
+	// Use the first item's context for the request. If any individual
 	// context is already cancelled the caller will see it through their
 	// done channel timeout.
-	resp, err := a.svc.Enqueue(items[0].ctx, &filav1.EnqueueRequest{
-		Messages: msgs,
-	})
-
+	results, err := enqueueRaw(items[0].ctx, a.c, msgs)
 	if err != nil {
-		mappedErr := mapEnqueueError(err)
 		for _, item := range items {
-			item.done <- accumulatorResult{err: mappedErr}
+			item.done <- accumulatorResult{err: err}
 		}
 		return
 	}
 
-	results := resp.GetResults()
 	for i, item := range items {
 		if i < len(results) {
-			r := results[i]
-			switch v := r.Result.(type) {
-			case *filav1.EnqueueResult_MessageId:
-				item.done <- accumulatorResult{messageID: v.MessageId}
-			case *filav1.EnqueueResult_Error:
-				item.done <- accumulatorResult{err: enqueueErrorToItemError(v.Error)}
-			default:
-				item.done <- accumulatorResult{err: &ItemError{Message: "unknown result type"}}
+			item.done <- accumulatorResult{
+				messageID: results[i].MessageID,
+				err:       results[i].Err,
 			}
 		} else {
-			item.done <- accumulatorResult{err: fmt.Errorf("enqueue: server returned fewer results than messages sent")}
+			item.done <- accumulatorResult{
+				err: fmt.Errorf("enqueue: server returned fewer results than messages sent"),
+			}
 		}
 	}
 }
