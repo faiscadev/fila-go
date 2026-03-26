@@ -6,7 +6,9 @@ import (
 )
 
 // buildConsumeFrame constructs a raw FIBP consume push payload for testing.
-// Each message entry: msg_id, fairness_key, queue, attempt_count, headers, payload.
+// Matches the server wire format (fila-core encode_consume_push):
+// each entry: msg_id, fairness_key, attempt_count, headers, payload.
+// There is no queue field in the push frame.
 func buildConsumeFrame(msgs []testConsumeMsg) []byte {
 	var buf []byte
 	buf = appendU16(buf, uint16(len(msgs)))
@@ -15,8 +17,6 @@ func buildConsumeFrame(msgs []testConsumeMsg) []byte {
 		buf = append(buf, m.id...)
 		buf = appendU16(buf, uint16(len(m.fairnessKey)))
 		buf = append(buf, m.fairnessKey...)
-		buf = appendU16(buf, uint16(len(m.queue)))
-		buf = append(buf, m.queue...)
 		buf = appendU32(buf, m.attemptCount)
 		buf = append(buf, uint8(len(m.headers)))
 		for k, v := range m.headers {
@@ -34,7 +34,6 @@ func buildConsumeFrame(msgs []testConsumeMsg) []byte {
 type testConsumeMsg struct {
 	id           string
 	fairnessKey  string
-	queue        string
 	attemptCount uint32
 	headers      map[string]string
 	payload      []byte
@@ -53,7 +52,6 @@ func TestDecodeConsumeFrameSingle(t *testing.T) {
 		{
 			id:           "msg-1",
 			fairnessKey:  "key-1",
-			queue:        "q1",
 			attemptCount: 0,
 			headers:      nil,
 			payload:      []byte("payload-1"),
@@ -76,16 +74,13 @@ func TestDecodeConsumeFrameSingle(t *testing.T) {
 	if msgs[0].FairnessKey != "key-1" {
 		t.Errorf("expected fairness key key-1, got %s", msgs[0].FairnessKey)
 	}
-	if msgs[0].Queue != "q1" {
-		t.Errorf("expected queue q1, got %s", msgs[0].Queue)
-	}
 }
 
 func TestDecodeConsumeFrameMultiple(t *testing.T) {
 	raw := buildConsumeFrame([]testConsumeMsg{
-		{id: "msg-1", queue: "q1", payload: []byte("payload-1")},
-		{id: "msg-2", queue: "q1", payload: []byte("payload-2")},
-		{id: "msg-3", queue: "q1", payload: []byte("payload-3")},
+		{id: "msg-1", payload: []byte("payload-1")},
+		{id: "msg-2", payload: []byte("payload-2")},
+		{id: "msg-3", payload: []byte("payload-3")},
 	})
 
 	msgs, err := decodeConsumeFrame(raw)
@@ -127,8 +122,7 @@ func TestDecodeConsumeFrameKeepalive(t *testing.T) {
 func TestDecodeConsumeFrameWithHeaders(t *testing.T) {
 	raw := buildConsumeFrame([]testConsumeMsg{
 		{
-			id:    "msg-hdr",
-			queue: "q1",
+			id: "msg-hdr",
 			headers: map[string]string{
 				"tenant": "acme",
 			},
@@ -150,7 +144,7 @@ func TestDecodeConsumeFrameWithHeaders(t *testing.T) {
 
 func TestDecodeConsumeFrameAttemptCount(t *testing.T) {
 	raw := buildConsumeFrame([]testConsumeMsg{
-		{id: "msg-retry", queue: "q1", attemptCount: 3, payload: []byte("retry")},
+		{id: "msg-retry", attemptCount: 3, payload: []byte("retry")},
 	})
 
 	msgs, err := decodeConsumeFrame(raw)
@@ -167,7 +161,7 @@ func TestDecodeConsumeFrameAttemptCount(t *testing.T) {
 
 func TestDecodeConsumeFrameTruncated(t *testing.T) {
 	raw := buildConsumeFrame([]testConsumeMsg{
-		{id: "msg-1", queue: "q1", payload: []byte("data")},
+		{id: "msg-1", payload: []byte("data")},
 	})
 	// Truncate payload.
 	_, err := decodeConsumeFrame(raw[:len(raw)-2])

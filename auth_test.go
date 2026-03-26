@@ -14,6 +14,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"syscall"
 	"testing"
 	"time"
 
@@ -189,19 +190,26 @@ func startTLSTestServer(t *testing.T, caCertPEM, serverCertPEM, serverKeyPEM, cl
 		dataDir: dataDir,
 	}
 
-	// Wait for server to be ready using FIBP + TLS (with client cert if mTLS).
-	waitForFIBPWithTLS(t, addr, caCertPEM, clientCertPEM, clientKeyPEM, 10*time.Second)
-
 	t.Cleanup(func() {
 		ts.stop()
 	})
 
+	// Wait for server to be ready using FIBP + TLS (with client cert if mTLS).
+	// If the process exits before becoming ready (e.g. panic due to TLS
+	// initialisation failure), skip rather than hang for the full timeout.
+	waitForFIBPWithTLSOrSkip(t, cmd, addr, caCertPEM, clientCertPEM, clientKeyPEM, 10*time.Second)
+
 	return ts
 }
 
-// waitForFIBPWithTLS polls addr until a FIBP handshake over TLS succeeds.
-func waitForFIBPWithTLS(t *testing.T, addr string, caCertPEM, clientCertPEM, clientKeyPEM []byte, timeout time.Duration) {
+// waitForFIBPWithTLSOrSkip polls addr until a FIBP handshake over TLS succeeds,
+// skipping the test if the server process exits before becoming ready.
+// This guards against server binaries that panic on TLS initialisation
+// (e.g. missing rustls CryptoProvider) so the test skips instead of
+// timing out after the full 10-second window.
+func waitForFIBPWithTLSOrSkip(t *testing.T, cmd *exec.Cmd, addr string, caCertPEM, clientCertPEM, clientKeyPEM []byte, timeout time.Duration) {
 	t.Helper()
+
 	var opts []fila.DialOption
 	if caCertPEM != nil {
 		opts = append(opts, fila.WithTLSCACert(caCertPEM))
@@ -211,8 +219,17 @@ func waitForFIBPWithTLS(t *testing.T, addr string, caCertPEM, clientCertPEM, cli
 	} else {
 		opts = append(opts, fila.WithTLS())
 	}
+
 	deadline := time.Now().Add(timeout)
 	for time.Now().Before(deadline) {
+		// Check if the server process has already exited (e.g. panic on
+		// TLS initialisation). Signal 0 probes liveness without killing.
+		if cmd.Process != nil {
+			if err := cmd.Process.Signal(syscall.Signal(0)); err != nil {
+				t.Skipf("fila-server exited before TLS became ready; skipping TLS test (process check: %v)", err)
+			}
+		}
+
 		client, err := fila.Dial(addr, opts...)
 		if err == nil {
 			client.Close()

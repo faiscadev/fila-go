@@ -140,18 +140,19 @@ func encodeConsumeRequest(queue string, initialCredits uint32) []byte {
 
 // decodeConsumeFrame decodes a server-pushed consume delivery frame.
 //
-// The server pushes messages using the same repeated-message wire format as
-// the enqueue response, but prefixed with a message count:
+// Server wire format (matches fila-core encode_consume_push):
 //
 //	msg_count:u16
 //	for each message:
 //	  msg_id_len:u16 | msg_id:utf8
 //	  fairness_key_len:u16 | fairness_key:utf8
-//	  queue_len:u16 | queue:utf8
 //	  attempt_count:u32
 //	  header_count:u8
 //	  for each header: key_len:u16|key | val_len:u16|val
 //	  payload_len:u32 | payload:bytes
+//
+// Note: there is no queue field in the push frame; the queue name is known
+// from the consume subscription.
 func decodeConsumeFrame(payload []byte) ([]*ConsumeMessage, error) {
 	if len(payload) < 2 {
 		// Keepalive or empty push — not an error.
@@ -202,10 +203,6 @@ func decodeConsumeMessage(data []byte) (*ConsumeMessage, int, error) {
 	if err != nil {
 		return nil, 0, err
 	}
-	queue, err := readStr("queue")
-	if err != nil {
-		return nil, 0, err
-	}
 
 	if pos+4 > len(data) {
 		return nil, 0, fmt.Errorf("truncated attempt_count")
@@ -248,7 +245,6 @@ func decodeConsumeMessage(data []byte) (*ConsumeMessage, int, error) {
 	return &ConsumeMessage{
 		ID:           msgID,
 		FairnessKey:  fairnessKey,
-		Queue:        queue,
 		AttemptCount: attemptCount,
 		Headers:      headers,
 		Payload:      payload,
