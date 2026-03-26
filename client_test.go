@@ -62,7 +62,7 @@ func startTestServer(t *testing.T) *testServer {
 
 	// Write a fila.toml config with the test listen address.
 	configPath := filepath.Join(dataDir, "fila.toml")
-	configContent := fmt.Sprintf("[server]\nlisten_addr = %q\n", addr)
+	configContent := fmt.Sprintf("[fibp]\nlisten_addr = %q\n", addr)
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		os.RemoveAll(dataDir)
 		t.Fatalf("failed to write fila.toml: %v", err)
