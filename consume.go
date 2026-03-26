@@ -1,11 +1,10 @@
 package fila
 
 import (
+	"bytes"
 	"context"
-
-	filav1 "github.com/faisca/fila-go/filav1"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	"encoding/binary"
+	"fmt"
 )
 
 // ConsumeMessage represents a message received from the broker.
@@ -18,50 +17,63 @@ type ConsumeMessage struct {
 	Queue        string
 }
 
-// leaderHintKey is the gRPC metadata key the server uses to indicate the
-// current leader's client address when returning UNAVAILABLE.
-const leaderHintKey = "x-fila-leader-addr"
+// defaultInitialCredits is the number of flow credits sent with a new
+// consume request. The server uses credits to bound the number of
+// in-flight messages per consumer.
+const defaultInitialCredits = 256
 
 // Consume opens a streaming consumer on the specified queue.
 //
 // Returns a receive-only channel that delivers messages as they become
 // available. The channel is closed when the server stream ends, the context
-// is cancelled, or a stream error occurs.
+// is cancelled, or a connection error occurs.
 //
 // The consumer transparently unpacks delivery batches: when the server
-// sends multiple messages in a single ConsumeResponse (via the repeated
-// messages field), each message is delivered individually on the channel.
+// sends multiple messages in a single push frame, each message is delivered
+// individually on the channel.
 //
-// If the server returns UNAVAILABLE with a leader hint (x-fila-leader-addr
-// metadata), the client transparently reconnects to the indicated leader and
-// retries once. At most one redirect is attempted per Consume call.
+// If the server returns a leader-hint error (FIBP error code for UNAVAILABLE),
+// the client transparently reconnects to the indicated leader and retries once.
 func (c *Client) Consume(ctx context.Context, queue string) (<-chan *ConsumeMessage, error) {
-	stream, err := c.svc.Consume(ctx, &filav1.ConsumeRequest{
-		Queue: queue,
-	})
+	payload := encodeConsumeRequest(queue, defaultInitialCredits)
+
+	corrID, pushCh, err := c.conn.openStream(0, opConsume, payload)
 	if err != nil {
-		return nil, mapConsumeError(err)
+		return nil, fmt.Errorf("consume: %w", err)
 	}
 
-	ch := make(chan *ConsumeMessage, 1)
+	ch := make(chan *ConsumeMessage, 16)
 
 	go func() {
 		defer close(ch)
+		defer c.conn.closeStream(corrID)
+
 		for {
-			resp, err := stream.Recv()
-			if err != nil {
-				// On UNAVAILABLE, check trailing metadata for a leader hint
-				// and transparently reconnect once.
-				if st, ok := status.FromError(err); ok && st.Code() == codes.Unavailable {
-					if leaderAddr := extractLeaderHintFromTrailer(stream); leaderAddr != "" {
-						c.consumeViaLeaderInto(ctx, queue, leaderAddr, ch)
+			select {
+			case <-ctx.Done():
+				return
+			case f, ok := <-pushCh:
+				if !ok {
+					return
+				}
+				if f.op == opError {
+					errMsg, errCode := decodeErrorPayload(f.payload)
+					if errCode == errCodeLeaderRedirect && errMsg != "" {
+						c.consumeViaLeaderInto(ctx, queue, errMsg, ch)
+					}
+					return
+				}
+				msgs, err := decodeConsumeFrame(f.payload)
+				if err != nil {
+					return
+				}
+				for _, msg := range msgs {
+					select {
+					case ch <- msg:
+					case <-ctx.Done():
 						return
 					}
 				}
-				return
-			}
-			if !sendMessages(ctx, ch, resp) {
-				return
 			}
 		}
 	}()
@@ -69,9 +81,12 @@ func (c *Client) Consume(ctx context.Context, queue string) (<-chan *ConsumeMess
 	return ch, nil
 }
 
+// errCodeLeaderRedirect is the FIBP error code the server sends when the
+// client should reconnect to a different node.
+const errCodeLeaderRedirect = 0x0010
+
 // consumeViaLeaderInto dials the leader address and pumps messages into the
 // provided channel. The temporary connection is closed when the stream ends.
-// This is called from within the goroutine, so it must not spawn another one.
 func (c *Client) consumeViaLeaderInto(ctx context.Context, queue, leaderAddr string, ch chan *ConsumeMessage) {
 	leaderClient, err := Dial(leaderAddr, c.opts...)
 	if err != nil {
@@ -79,82 +94,163 @@ func (c *Client) consumeViaLeaderInto(ctx context.Context, queue, leaderAddr str
 	}
 	defer leaderClient.Close()
 
-	stream, err := leaderClient.svc.Consume(ctx, &filav1.ConsumeRequest{
-		Queue: queue,
-	})
+	payload := encodeConsumeRequest(queue, defaultInitialCredits)
+	corrID, pushCh, err := leaderClient.conn.openStream(0, opConsume, payload)
 	if err != nil {
 		return
 	}
+	defer leaderClient.conn.closeStream(corrID)
 
 	for {
-		resp, err := stream.Recv()
-		if err != nil {
-			return
-		}
-		if !sendMessages(ctx, ch, resp) {
-			return
-		}
-	}
-}
-
-// sendMessages extracts messages from a ConsumeResponse and sends them on
-// the channel. Returns false if the context was cancelled and the caller
-// should stop.
-func sendMessages(ctx context.Context, ch chan *ConsumeMessage, resp *filav1.ConsumeResponse) bool {
-	msgs := extractMessages(resp)
-	for _, msg := range msgs {
 		select {
-		case ch <- msg:
 		case <-ctx.Done():
-			return false
+			return
+		case f, ok := <-pushCh:
+			if !ok {
+				return
+			}
+			if f.op == opError {
+				return
+			}
+			msgs, err := decodeConsumeFrame(f.payload)
+			if err != nil {
+				return
+			}
+			for _, msg := range msgs {
+				select {
+				case ch <- msg:
+				case <-ctx.Done():
+					return
+				}
+			}
 		}
 	}
-	return true
 }
 
-// extractMessages unpacks a ConsumeResponse into individual ConsumeMessages.
-// Returns nil for keepalive frames (empty messages field).
-func extractMessages(resp *filav1.ConsumeResponse) []*ConsumeMessage {
-	if len(resp.Messages) == 0 {
-		return nil
+// encodeConsumeRequest builds the FIBP consume request payload.
+//
+// Wire format: queue_len:u16 | queue:utf8 | initial_credits:u32
+func encodeConsumeRequest(queue string, initialCredits uint32) []byte {
+	var buf bytes.Buffer
+	writeU16(&buf, uint16(len(queue)))
+	buf.WriteString(queue)
+	writeU32(&buf, initialCredits)
+	return buf.Bytes()
+}
+
+// decodeConsumeFrame decodes a server-pushed consume delivery frame.
+//
+// The server pushes messages using the same repeated-message wire format as
+// the enqueue response, but prefixed with a message count:
+//
+//	msg_count:u16
+//	for each message:
+//	  msg_id_len:u16 | msg_id:utf8
+//	  fairness_key_len:u16 | fairness_key:utf8
+//	  queue_len:u16 | queue:utf8
+//	  attempt_count:u32
+//	  header_count:u8
+//	  for each header: key_len:u16|key | val_len:u16|val
+//	  payload_len:u32 | payload:bytes
+func decodeConsumeFrame(payload []byte) ([]*ConsumeMessage, error) {
+	if len(payload) < 2 {
+		// Keepalive or empty push — not an error.
+		return nil, nil
 	}
-	result := make([]*ConsumeMessage, 0, len(resp.Messages))
-	for _, msg := range resp.Messages {
-		cm := protoToConsumeMessage(msg)
-		if cm != nil {
-			result = append(result, cm)
+	count := int(binary.BigEndian.Uint16(payload[0:2]))
+	if count == 0 {
+		return nil, nil
+	}
+	pos := 2
+
+	msgs := make([]*ConsumeMessage, 0, count)
+	for i := 0; i < count; i++ {
+		msg, n, err := decodeConsumeMessage(payload[pos:])
+		if err != nil {
+			return nil, fmt.Errorf("consume frame: message %d: %w", i, err)
 		}
+		pos += n
+		msgs = append(msgs, msg)
 	}
-	return result
+	return msgs, nil
 }
 
-// extractLeaderHintFromTrailer reads the leader address from the stream's
-// trailing metadata after a failed Recv.
-func extractLeaderHintFromTrailer(stream filav1.FilaService_ConsumeClient) string {
-	md := stream.Trailer()
-	vals := md.Get(leaderHintKey)
-	if len(vals) > 0 && vals[0] != "" {
-		return vals[0]
-	}
-	return ""
-}
+// decodeConsumeMessage parses a single message from a consume push frame.
+// Returns the message and the number of bytes consumed.
+func decodeConsumeMessage(data []byte) (*ConsumeMessage, int, error) {
+	pos := 0
 
-// protoToConsumeMessage converts a proto Message to a ConsumeMessage.
-// Returns nil if msg is nil (keepalive frame).
-func protoToConsumeMessage(msg *filav1.Message) *ConsumeMessage {
-	if msg == nil {
-		return nil
+	readStr := func(field string) (string, error) {
+		if pos+2 > len(data) {
+			return "", fmt.Errorf("truncated %s length", field)
+		}
+		l := int(binary.BigEndian.Uint16(data[pos : pos+2]))
+		pos += 2
+		if pos+l > len(data) {
+			return "", fmt.Errorf("truncated %s value", field)
+		}
+		s := string(data[pos : pos+l])
+		pos += l
+		return s, nil
 	}
-	metadata := msg.Metadata
-	if metadata == nil {
-		metadata = &filav1.MessageMetadata{}
+
+	msgID, err := readStr("msg_id")
+	if err != nil {
+		return nil, 0, err
 	}
+	fairnessKey, err := readStr("fairness_key")
+	if err != nil {
+		return nil, 0, err
+	}
+	queue, err := readStr("queue")
+	if err != nil {
+		return nil, 0, err
+	}
+
+	if pos+4 > len(data) {
+		return nil, 0, fmt.Errorf("truncated attempt_count")
+	}
+	attemptCount := binary.BigEndian.Uint32(data[pos : pos+4])
+	pos += 4
+
+	if pos+1 > len(data) {
+		return nil, 0, fmt.Errorf("truncated header_count")
+	}
+	headerCount := int(data[pos])
+	pos++
+
+	headers := make(map[string]string, headerCount)
+	for j := 0; j < headerCount; j++ {
+		k, err := readStr(fmt.Sprintf("header[%d] key", j))
+		if err != nil {
+			return nil, 0, err
+		}
+		v, err := readStr(fmt.Sprintf("header[%d] val", j))
+		if err != nil {
+			return nil, 0, err
+		}
+		headers[k] = v
+	}
+
+	if pos+4 > len(data) {
+		return nil, 0, fmt.Errorf("truncated payload_len")
+	}
+	payloadLen := int(binary.BigEndian.Uint32(data[pos : pos+4]))
+	pos += 4
+
+	if pos+payloadLen > len(data) {
+		return nil, 0, fmt.Errorf("truncated payload")
+	}
+	payload := make([]byte, payloadLen)
+	copy(payload, data[pos:pos+payloadLen])
+	pos += payloadLen
+
 	return &ConsumeMessage{
-		ID:           msg.Id,
-		Headers:      msg.Headers,
-		Payload:      msg.Payload,
-		FairnessKey:  metadata.FairnessKey,
-		AttemptCount: metadata.AttemptCount,
-		Queue:        metadata.QueueId,
-	}
+		ID:           msgID,
+		FairnessKey:  fairnessKey,
+		Queue:        queue,
+		AttemptCount: attemptCount,
+		Headers:      headers,
+		Payload:      payload,
+	}, pos, nil
 }

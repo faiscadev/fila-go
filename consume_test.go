@@ -1,26 +1,69 @@
 package fila
 
 import (
+	"encoding/binary"
 	"testing"
-
-	filav1 "github.com/faisca/fila-go/filav1"
 )
 
-func TestExtractMessagesRepeated(t *testing.T) {
-	resp := &filav1.ConsumeResponse{
-		Messages: []*filav1.Message{
-			{
-				Id:      "msg-1",
-				Payload: []byte("payload-1"),
-				Metadata: &filav1.MessageMetadata{
-					FairnessKey: "key-1",
-					QueueId:     "q1",
-				},
-			},
-		},
+// buildConsumeFrame constructs a raw FIBP consume push payload for testing.
+// Each message entry: msg_id, fairness_key, queue, attempt_count, headers, payload.
+func buildConsumeFrame(msgs []testConsumeMsg) []byte {
+	var buf []byte
+	buf = appendU16(buf, uint16(len(msgs)))
+	for _, m := range msgs {
+		buf = appendU16(buf, uint16(len(m.id)))
+		buf = append(buf, m.id...)
+		buf = appendU16(buf, uint16(len(m.fairnessKey)))
+		buf = append(buf, m.fairnessKey...)
+		buf = appendU16(buf, uint16(len(m.queue)))
+		buf = append(buf, m.queue...)
+		buf = appendU32(buf, m.attemptCount)
+		buf = append(buf, uint8(len(m.headers)))
+		for k, v := range m.headers {
+			buf = appendU16(buf, uint16(len(k)))
+			buf = append(buf, k...)
+			buf = appendU16(buf, uint16(len(v)))
+			buf = append(buf, v...)
+		}
+		buf = appendU32(buf, uint32(len(m.payload)))
+		buf = append(buf, m.payload...)
 	}
+	return buf
+}
 
-	msgs := extractMessages(resp)
+type testConsumeMsg struct {
+	id           string
+	fairnessKey  string
+	queue        string
+	attemptCount uint32
+	headers      map[string]string
+	payload      []byte
+}
+
+func appendU16(b []byte, v uint16) []byte {
+	return append(b, byte(v>>8), byte(v))
+}
+
+func appendU32(b []byte, v uint32) []byte {
+	return append(b, byte(v>>24), byte(v>>16), byte(v>>8), byte(v))
+}
+
+func TestDecodeConsumeFrameSingle(t *testing.T) {
+	raw := buildConsumeFrame([]testConsumeMsg{
+		{
+			id:           "msg-1",
+			fairnessKey:  "key-1",
+			queue:        "q1",
+			attemptCount: 0,
+			headers:      nil,
+			payload:      []byte("payload-1"),
+		},
+	})
+
+	msgs, err := decodeConsumeFrame(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}
@@ -33,43 +76,25 @@ func TestExtractMessagesRepeated(t *testing.T) {
 	if msgs[0].FairnessKey != "key-1" {
 		t.Errorf("expected fairness key key-1, got %s", msgs[0].FairnessKey)
 	}
+	if msgs[0].Queue != "q1" {
+		t.Errorf("expected queue q1, got %s", msgs[0].Queue)
+	}
 }
 
-func TestExtractMessagesMultiple(t *testing.T) {
-	resp := &filav1.ConsumeResponse{
-		Messages: []*filav1.Message{
-			{
-				Id:      "msg-1",
-				Payload: []byte("payload-1"),
-				Metadata: &filav1.MessageMetadata{
-					FairnessKey: "key-1",
-					QueueId:     "q1",
-				},
-			},
-			{
-				Id:      "msg-2",
-				Payload: []byte("payload-2"),
-				Metadata: &filav1.MessageMetadata{
-					FairnessKey: "key-2",
-					QueueId:     "q1",
-				},
-			},
-			{
-				Id:      "msg-3",
-				Payload: []byte("payload-3"),
-				Metadata: &filav1.MessageMetadata{
-					FairnessKey: "key-3",
-					QueueId:     "q1",
-				},
-			},
-		},
-	}
+func TestDecodeConsumeFrameMultiple(t *testing.T) {
+	raw := buildConsumeFrame([]testConsumeMsg{
+		{id: "msg-1", queue: "q1", payload: []byte("payload-1")},
+		{id: "msg-2", queue: "q1", payload: []byte("payload-2")},
+		{id: "msg-3", queue: "q1", payload: []byte("payload-3")},
+	})
 
-	msgs := extractMessages(resp)
+	msgs, err := decodeConsumeFrame(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(msgs) != 3 {
 		t.Fatalf("expected 3 messages, got %d", len(msgs))
 	}
-
 	for i, msg := range msgs {
 		expectedID := "msg-" + string(rune('1'+i))
 		if msg.ID != expectedID {
@@ -78,42 +103,101 @@ func TestExtractMessagesMultiple(t *testing.T) {
 	}
 }
 
-func TestExtractMessagesKeepalive(t *testing.T) {
-	// A keepalive frame has no messages.
-	resp := &filav1.ConsumeResponse{}
-
-	msgs := extractMessages(resp)
+func TestDecodeConsumeFrameKeepalive(t *testing.T) {
+	// An empty payload (or zero-count frame) is a keepalive — not an error.
+	msgs, err := decodeConsumeFrame(nil)
+	if err != nil {
+		t.Fatalf("unexpected error for nil payload: %v", err)
+	}
 	if msgs != nil {
-		t.Errorf("expected nil for keepalive frame, got %v", msgs)
+		t.Errorf("expected nil for empty payload, got %v", msgs)
+	}
+
+	// Zero-count frame.
+	raw := []byte{0x00, 0x00}
+	msgs, err = decodeConsumeFrame(raw)
+	if err != nil {
+		t.Fatalf("unexpected error for zero-count frame: %v", err)
+	}
+	if len(msgs) != 0 {
+		t.Errorf("expected 0 messages for zero-count frame, got %d", len(msgs))
 	}
 }
 
-func TestExtractMessagesNilMetadata(t *testing.T) {
-	// Messages without metadata should still work (empty metadata).
-	resp := &filav1.ConsumeResponse{
-		Messages: []*filav1.Message{
-			{
-				Id:      "no-meta",
-				Payload: []byte("test"),
+func TestDecodeConsumeFrameWithHeaders(t *testing.T) {
+	raw := buildConsumeFrame([]testConsumeMsg{
+		{
+			id:    "msg-hdr",
+			queue: "q1",
+			headers: map[string]string{
+				"tenant": "acme",
 			},
+			payload: []byte("with-headers"),
 		},
-	}
+	})
 
-	msgs := extractMessages(resp)
+	msgs, err := decodeConsumeFrame(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
 	if len(msgs) != 1 {
 		t.Fatalf("expected 1 message, got %d", len(msgs))
 	}
-	if msgs[0].FairnessKey != "" {
-		t.Errorf("expected empty fairness key, got %s", msgs[0].FairnessKey)
-	}
-	if msgs[0].AttemptCount != 0 {
-		t.Errorf("expected 0 attempt count, got %d", msgs[0].AttemptCount)
+	if msgs[0].Headers["tenant"] != "acme" {
+		t.Errorf("expected header tenant=acme, got %v", msgs[0].Headers)
 	}
 }
 
-func TestProtoToConsumeMessageNil(t *testing.T) {
-	msg := protoToConsumeMessage(nil)
-	if msg != nil {
-		t.Error("expected nil for nil proto message")
+func TestDecodeConsumeFrameAttemptCount(t *testing.T) {
+	raw := buildConsumeFrame([]testConsumeMsg{
+		{id: "msg-retry", queue: "q1", attemptCount: 3, payload: []byte("retry")},
+	})
+
+	msgs, err := decodeConsumeFrame(raw)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
 	}
+	if len(msgs) != 1 {
+		t.Fatalf("expected 1 message, got %d", len(msgs))
+	}
+	if msgs[0].AttemptCount != 3 {
+		t.Errorf("expected attempt count 3, got %d", msgs[0].AttemptCount)
+	}
+}
+
+func TestDecodeConsumeFrameTruncated(t *testing.T) {
+	raw := buildConsumeFrame([]testConsumeMsg{
+		{id: "msg-1", queue: "q1", payload: []byte("data")},
+	})
+	// Truncate payload.
+	_, err := decodeConsumeFrame(raw[:len(raw)-2])
+	if err == nil {
+		t.Fatal("expected error for truncated frame, got nil")
+	}
+}
+
+func TestDecodeErrorPayload(t *testing.T) {
+	// Build an error payload: err_code:u16 | err_len:u16 | err_msg
+	msg := "queue not found"
+	payload := make([]byte, 4+len(msg))
+	binary.BigEndian.PutUint16(payload[0:2], 1) // code = 1
+	binary.BigEndian.PutUint16(payload[2:4], uint16(len(msg)))
+	copy(payload[4:], msg)
+
+	gotMsg, gotCode := decodeErrorPayload(payload)
+	if gotCode != 1 {
+		t.Errorf("expected code 1, got %d", gotCode)
+	}
+	if gotMsg != msg {
+		t.Errorf("expected message %q, got %q", msg, gotMsg)
+	}
+}
+
+func TestDecodeErrorPayloadShort(t *testing.T) {
+	// Too-short payload should return a safe fallback.
+	msg, code := decodeErrorPayload([]byte{0x00})
+	if msg == "" {
+		t.Error("expected non-empty fallback message")
+	}
+	_ = code
 }
