@@ -1,6 +1,7 @@
 package fila
 
 import (
+	"context"
 	"fmt"
 
 	filav1 "github.com/faisca/fila-go/filav1"
@@ -44,7 +45,7 @@ func (a *AdminClient) CreateQueue(name string, config *filav1.QueueConfig) error
 		return fmt.Errorf("create queue: marshal: %w", err)
 	}
 
-	resp, err := a.c.send(0, opCreateQueue, payload)
+	resp, err := a.c.send(context.Background(), 0, opCreateQueue, payload)
 	if err != nil {
 		return err
 	}
@@ -63,7 +64,7 @@ func (a *AdminClient) ListQueues() ([]string, error) {
 		return nil, fmt.Errorf("list queues: marshal: %w", err)
 	}
 
-	resp, err := a.c.send(0, opListQueues, payload)
+	resp, err := a.c.send(context.Background(), 0, opListQueues, payload)
 	if err != nil {
 		return nil, err
 	}
@@ -91,7 +92,7 @@ func (a *AdminClient) DeleteQueue(name string) error {
 		return fmt.Errorf("delete queue: marshal: %w", err)
 	}
 
-	resp, err := a.c.send(0, opDeleteQueue, payload)
+	resp, err := a.c.send(context.Background(), 0, opDeleteQueue, payload)
 	if err != nil {
 		return err
 	}

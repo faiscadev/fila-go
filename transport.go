@@ -1,6 +1,7 @@
 package fila
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"io"
@@ -8,6 +9,10 @@ import (
 	"sync"
 	"sync/atomic"
 )
+
+// maxFrameSize is the maximum allowed FIBP frame body size (16 MiB).
+// Frames larger than this are rejected to prevent runaway allocations.
+const maxFrameSize = 16_777_216
 
 // FIBP op codes.
 const (
@@ -168,21 +173,26 @@ func (c *conn) readLoop() {
 			}
 		} else {
 			// Route to a one-shot pending channel.
+			// Send while holding the lock so that readLoop teardown
+			// (which also holds pendingMu before closing channels)
+			// cannot close ch between the unlock and the send.
+			// The channel is buffered(1) so this never blocks.
 			c.pendingMu.Lock()
 			ch, ok := c.pending[f.corrID]
 			if ok {
 				delete(c.pending, f.corrID)
-			}
-			c.pendingMu.Unlock()
-			if ok {
 				ch <- f
 			}
+			c.pendingMu.Unlock()
 		}
 	}
 }
 
 // send writes a frame and waits for the correlated response.
-func (c *conn) send(flags, op uint8, payload []byte) (frame, error) {
+// It respects ctx cancellation/deadline: if the context is done before
+// the response arrives, the pending registration is cleaned up and
+// ctx.Err() is returned.
+func (c *conn) send(ctx context.Context, flags, op uint8, payload []byte) (frame, error) {
 	corrID := c.nextCorrID.Add(1)
 
 	ch := make(chan frame, 1)
@@ -197,11 +207,20 @@ func (c *conn) send(flags, op uint8, payload []byte) (frame, error) {
 		return frame{}, err
 	}
 
-	resp, ok := <-ch
-	if !ok {
-		return frame{}, ErrConnectionClosed
+	select {
+	case resp, ok := <-ch:
+		if !ok {
+			return frame{}, ErrConnectionClosed
+		}
+		return resp, nil
+	case <-ctx.Done():
+		// Remove the pending entry so the read loop doesn't try to deliver
+		// a response to an abandoned channel.
+		c.pendingMu.Lock()
+		delete(c.pending, corrID)
+		c.pendingMu.Unlock()
+		return frame{}, ctx.Err()
 	}
-	return resp, nil
 }
 
 // openStream registers a push channel for a long-lived consume stream and
@@ -267,6 +286,9 @@ func readFrame(r io.Reader) (frame, error) {
 	totalLen := binary.BigEndian.Uint32(lenBuf[:])
 	if totalLen < 6 {
 		return frame{}, fmt.Errorf("fibp: frame too short (%d bytes)", totalLen)
+	}
+	if totalLen > maxFrameSize {
+		return frame{}, fmt.Errorf("fibp: frame too large (%d bytes, max %d)", totalLen, maxFrameSize)
 	}
 
 	body := make([]byte, totalLen)

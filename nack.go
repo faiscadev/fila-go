@@ -14,7 +14,7 @@ import (
 func (c *Client) Nack(ctx context.Context, queue string, msgID string, errMsg string) error {
 	payload := encodeNackRequest(queue, msgID, errMsg)
 
-	resp, err := c.conn.send(0, opNack, payload)
+	resp, err := c.conn.send(ctx, 0, opNack, payload)
 	if err != nil {
 		return err
 	}

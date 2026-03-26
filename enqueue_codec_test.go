@@ -9,7 +9,10 @@ func TestEncodeDecodeEnqueueRoundtrip(t *testing.T) {
 		{Queue: "q1", Headers: map[string]string{"k": "v"}, Payload: []byte("hello")},
 		{Queue: "q1", Payload: []byte("world")},
 	}
-	payload := encodeEnqueueRequest("q1", msgs)
+	payload, err := encodeEnqueueRequest("q1", msgs)
+	if err != nil {
+		t.Fatalf("unexpected error encoding request: %v", err)
+	}
 	if len(payload) == 0 {
 		t.Fatal("expected non-empty payload")
 	}

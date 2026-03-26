@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
-	"crypto/tls"
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
@@ -467,22 +466,3 @@ func TestNoAuthBackwardCompatible(t *testing.T) {
 	}
 }
 
-// buildTestTLSConfig is kept for compatibility with any remaining test helpers.
-func buildTestTLSConfig(caCertPEM, clientCertPEM, clientKeyPEM []byte) (*tls.Config, error) {
-	certPool := x509.NewCertPool()
-	if !certPool.AppendCertsFromPEM(caCertPEM) {
-		return nil, fmt.Errorf("failed to parse CA cert")
-	}
-	cfg := &tls.Config{
-		RootCAs:    certPool,
-		MinVersion: tls.VersionTLS12,
-	}
-	if clientCertPEM != nil && clientKeyPEM != nil {
-		cert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
-		if err != nil {
-			return nil, err
-		}
-		cfg.Certificates = []tls.Certificate{cert}
-	}
-	return cfg, nil
-}

@@ -13,7 +13,7 @@ import (
 func (c *Client) Ack(ctx context.Context, queue string, msgID string) error {
 	payload := encodeAckRequest(queue, msgID)
 
-	resp, err := c.conn.send(0, opAck, payload)
+	resp, err := c.conn.send(ctx, 0, opAck, payload)
 	if err != nil {
 		return err
 	}

@@ -87,9 +87,15 @@ func enqueueRaw(ctx context.Context, c *conn, messages []EnqueueMessage) ([]Enqu
 
 	for _, q := range order {
 		g := groups[q]
-		payload := encodeEnqueueRequest(g.queue, g.messages)
+		payload, encErr := encodeEnqueueRequest(g.queue, g.messages)
+		if encErr != nil {
+			for _, idx := range g.indices {
+				results[idx] = EnqueueManyResult{Err: encErr}
+			}
+			continue
+		}
 
-		resp, err := c.send(0, opEnqueue, payload)
+		resp, err := c.send(ctx, 0, opEnqueue, payload)
 		if err != nil {
 			// Propagate connection-level error to all messages in this group.
 			for _, idx := range g.indices {
@@ -130,7 +136,9 @@ func enqueueRaw(ctx context.Context, c *conn, messages []EnqueueMessage) ([]Enqu
 }
 
 // encodeEnqueueRequest builds the FIBP enqueue request payload.
-func encodeEnqueueRequest(queue string, messages []EnqueueMessage) []byte {
+// Returns an error if any message has more than 255 headers (the wire
+// format encodes header_count as a single u8).
+func encodeEnqueueRequest(queue string, messages []EnqueueMessage) ([]byte, error) {
 	var buf bytes.Buffer
 
 	// queue_len:u16 | queue:utf8
@@ -140,7 +148,10 @@ func encodeEnqueueRequest(queue string, messages []EnqueueMessage) []byte {
 	// msg_count:u16
 	writeU16(&buf, uint16(len(messages)))
 
-	for _, msg := range messages {
+	for i, msg := range messages {
+		if len(msg.Headers) > 255 {
+			return nil, fmt.Errorf("enqueue: message %d has %d headers, max is 255", i, len(msg.Headers))
+		}
 		// header_count:u8
 		buf.WriteByte(uint8(len(msg.Headers)))
 		for k, v := range msg.Headers {
@@ -153,7 +164,7 @@ func encodeEnqueueRequest(queue string, messages []EnqueueMessage) []byte {
 		writeU32(&buf, uint32(len(msg.Payload)))
 		buf.Write(msg.Payload)
 	}
-	return buf.Bytes()
+	return buf.Bytes(), nil
 }
 
 // decodeEnqueueResponse parses the FIBP enqueue response payload.
