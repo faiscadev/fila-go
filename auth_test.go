@@ -161,7 +161,7 @@ func startTLSTestServer(t *testing.T, caCertPEM, serverCertPEM, serverKeyPEM, cl
 	}
 
 	// Write fila.toml with TLS config.
-	configContent := fmt.Sprintf("[server]\nlisten_addr = %q\n\n[tls]\ncert_file = %q\nkey_file = %q\n", addr, certFile, keyFile)
+	configContent := fmt.Sprintf("[fibp]\nlisten_addr = %q\n\n[tls]\ncert_file = %q\nkey_file = %q\n", addr, certFile, keyFile)
 	if requireClientCert {
 		configContent += fmt.Sprintf("ca_file = %q\n", caFile)
 	}
@@ -252,7 +252,7 @@ func startAuthTestServer(t *testing.T, bootstrapKey string) *testServer {
 		t.Fatalf("failed to create temp dir: %v", err)
 	}
 
-	configContent := fmt.Sprintf("[server]\nlisten_addr = %q\n\n[auth]\nbootstrap_apikey = %q\n", addr, bootstrapKey)
+	configContent := fmt.Sprintf("[fibp]\nlisten_addr = %q\n\n[auth]\nbootstrap_apikey = %q\n", addr, bootstrapKey)
 	configPath := filepath.Join(dataDir, "fila.toml")
 	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
 		os.RemoveAll(dataDir)
