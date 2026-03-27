@@ -144,7 +144,7 @@ func (a *AdminClient) GetQueueStats(name string) (*QueueStats, error) {
 	}
 
 	p := resp.payload
-	if len(p) < 40 {
+	if len(p) < 48 {
 		return nil, fmt.Errorf("queue stats: response too short (%d bytes)", len(p))
 	}
 
