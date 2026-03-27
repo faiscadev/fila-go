@@ -280,3 +280,41 @@ func TestEnqueueNonexistentQueue(t *testing.T) {
 		t.Errorf("expected ErrQueueNotFound, got: %v", err)
 	}
 }
+
+func TestAdminCreateListDeleteQueue(t *testing.T) {
+	ts := startTestServer(t)
+
+	client, err := fila.Dial(ts.addr)
+	if err != nil {
+		t.Fatalf("failed to dial: %v", err)
+	}
+	defer client.Close()
+
+	admin := client.Admin()
+
+	// Create a queue.
+	if err := admin.CreateQueue("test-admin-list", nil); err != nil {
+		t.Fatalf("create queue failed: %v", err)
+	}
+
+	// List queues and verify it appears.
+	queues, err := admin.ListQueues()
+	if err != nil {
+		t.Fatalf("list queues failed: %v", err)
+	}
+	found := false
+	for _, q := range queues {
+		if q.Name == "test-admin-list" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("expected queue 'test-admin-list' in list, got %v", queues)
+	}
+
+	// Delete the queue.
+	if err := admin.DeleteQueue("test-admin-list"); err != nil {
+		t.Fatalf("delete queue failed: %v", err)
+	}
+}
