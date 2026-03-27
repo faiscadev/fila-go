@@ -14,9 +14,10 @@ const (
 	opDeleteQueue  uint8 = 0x11
 	opQueueStats   uint8 = 0x12
 	opListQueues   uint8 = 0x13
-	opPauseQueue   uint8 = 0x14
-	opResumeQueue  uint8 = 0x15
-	opRedrive      uint8 = 0x16
+	opRedrive      uint8 = 0x14
+	opConfigSet    uint8 = 0x15
+	opConfigGet    uint8 = 0x16
+	opConfigList   uint8 = 0x17
 )
 
 // AdminClient provides administrative operations on a Fila broker.
