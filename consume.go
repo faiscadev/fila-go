@@ -69,18 +69,42 @@ func (c *Client) Consume(ctx context.Context, queue string) (<-chan *ConsumeMess
 }
 
 // consumeViaLeader creates a temporary connection to the leader and pumps
-// messages through a channel.
+// messages through a channel. Does not recurse — a single redirect attempt.
 func (c *Client) consumeViaLeader(ctx context.Context, queue, leaderAddr string) (<-chan *ConsumeMessage, error) {
 	leaderClient, err := Dial(leaderAddr, c.opts...)
 	if err != nil {
 		return nil, err
 	}
 
-	innerCh, err := leaderClient.Consume(ctx, queue)
+	// Subscribe directly on the leader connection without going through
+	// Consume (which would retry the redirect). This bounds recursion to 1.
+	reqID, _, deliveryCh, err := leaderClient.conn.subscribe(ctx, queue)
 	if err != nil {
 		leaderClient.Close()
 		return nil, err
 	}
+
+	innerCh := make(chan *ConsumeMessage, 64)
+	go func() {
+		defer close(innerCh)
+		defer leaderClient.conn.cancelConsume(reqID)
+		for {
+			select {
+			case msg, ok := <-deliveryCh:
+				if !ok {
+					return
+				}
+				cm := deliveryToConsumeMessage(msg)
+				select {
+				case innerCh <- cm:
+				case <-ctx.Done():
+					return
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 
 	ch := make(chan *ConsumeMessage, 64)
 	go func() {

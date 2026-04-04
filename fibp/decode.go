@@ -1,5 +1,19 @@
 package fibp
 
+import "fmt"
+
+// maxDecodeCount is a safety limit on batch counts to prevent malformed frames
+// from causing huge allocations. The server's max frame size already limits
+// actual data, but this prevents degenerate allocations before we start reading.
+const maxDecodeCount = 1_000_000
+
+func validateCount(count uint32, remaining int) error {
+	if count > maxDecodeCount {
+		return fmt.Errorf("count %d exceeds safety limit %d", count, maxDecodeCount)
+	}
+	return nil
+}
+
 // --- Control response decoders ---
 
 // HandshakeOkResp holds the decoded HandshakeOk response.
@@ -44,6 +58,9 @@ func DecodeEnqueueResult(data []byte) ([]EnqueueResultItem, error) {
 	r := NewReader(data)
 	count, err := r.ReadU32()
 	if err != nil {
+		return nil, err
+	}
+	if err := validateCount(count, r.Remaining()); err != nil {
 		return nil, err
 	}
 	results := make([]EnqueueResultItem, count)
@@ -98,6 +115,9 @@ func DecodeDelivery(data []byte) ([]DeliveryMessage, error) {
 	r := NewReader(data)
 	count, err := r.ReadU32()
 	if err != nil {
+		return nil, err
+	}
+	if err := validateCount(count, r.Remaining()); err != nil {
 		return nil, err
 	}
 	msgs := make([]DeliveryMessage, count)
@@ -170,6 +190,9 @@ func DecodeAckResult(data []byte) ([]AckResultItem, error) {
 	if err != nil {
 		return nil, err
 	}
+	if err := validateCount(count, r.Remaining()); err != nil {
+		return nil, err
+	}
 	results := make([]AckResultItem, count)
 	for i := uint32(0); i < count; i++ {
 		code, err := r.ReadU8()
@@ -191,6 +214,9 @@ func DecodeNackResult(data []byte) ([]NackResultItem, error) {
 	r := NewReader(data)
 	count, err := r.ReadU32()
 	if err != nil {
+		return nil, err
+	}
+	if err := validateCount(count, r.Remaining()); err != nil {
 		return nil, err
 	}
 	results := make([]NackResultItem, count)

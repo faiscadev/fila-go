@@ -194,7 +194,10 @@ func (a *accumulator) flush(items []*accumulatorItem) {
 		return
 	}
 
-	_, respBody, err := a.conn.request(items[0].ctx, fibp.OpcodeEnqueue, body)
+	// Use a background context so that one caller's cancellation does not
+	// cascade to the entire batch. Individual callers will time out via
+	// their own done channel select.
+	_, respBody, err := a.conn.request(context.Background(), fibp.OpcodeEnqueue, body)
 	if err != nil {
 		for _, item := range items {
 			item.done <- accumulatorResult{err: err}

@@ -31,7 +31,7 @@ func (fw *FrameWriter) WriteFrame(opcode Opcode, requestID uint32, body []byte) 
 
 	maxBody := int(fw.maxFrameSize) - HeaderSize
 	if maxBody <= 0 {
-		maxBody = 1
+		return fmt.Errorf("maxFrameSize %d too small (must be > %d)", fw.maxFrameSize, HeaderSize)
 	}
 
 	if len(body) <= maxBody {

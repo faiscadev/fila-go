@@ -391,7 +391,8 @@ func TestErrorResponse(t *testing.T) {
 }
 
 func TestNotLeaderRedirect(t *testing.T) {
-	// We test that NotLeader with leader hint causes a ProtocolError with LeaderAddr.
+	// Verify that NotLeader with leader hint triggers a redirect attempt
+	// and that the error contains the right metadata.
 	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
 		for {
 			hdr, _, err := fr.ReadFrame()
@@ -418,10 +419,16 @@ func TestNotLeaderRedirect(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
 	defer cancel()
 
-	// The consume should fail because the leader redirect won't connect.
+	// The consume should fail because the leader redirect address is unreachable.
 	_, err = c.Consume(ctx, "q")
 	if err == nil {
 		t.Fatal("expected error from NotLeader redirect failure")
+	}
+	// The error should be a dial error to the leader address, not the original NotLeader.
+	// The fact that we got here means the redirect was attempted (consume.go tried
+	// to connect to "other-host:5555") — it didn't just return NotLeader directly.
+	if errors.Is(err, ErrNotLeader) {
+		t.Fatal("expected redirect attempt, not raw NotLeader error")
 	}
 }
 
@@ -429,6 +436,10 @@ func TestTLSClientCertWithoutTLS(t *testing.T) {
 	_, err := Dial("localhost:0", WithTLSClientCert([]byte("cert"), []byte("key")))
 	if err == nil {
 		t.Fatal("expected error")
+	}
+	expected := "WithTLSClientCert requires WithTLS or WithTLSCACert"
+	if err.Error() != expected+": client certificate has no effect without TLS" {
+		t.Fatalf("expected validation error, got: %v", err)
 	}
 }
 

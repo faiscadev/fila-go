@@ -17,9 +17,11 @@ import (
 //
 // Cleanup design:
 // - Close() sends Disconnect, cancels the read loop, and closes the TCP conn.
-// - The read loop goroutine detects conn close and exits.
-// - All pending request waiters receive an error on conn close.
-// - Delivery channels are closed when the read loop exits.
+// - The read loop goroutine detects conn close via read error and runs closeWaiters.
+// - closeWaiters uses non-blocking sends and channel close to avoid deadlocks.
+// - cancelConsume removes from the map but does NOT close the channel —
+//   only closeWaiters (on conn shutdown) or the Consume goroutine (which
+//   owns the output channel) performs closure.
 type conn struct {
 	netConn  net.Conn
 	writer   *fibp.FrameWriter
@@ -137,29 +139,32 @@ func (c *conn) handshake(opts *dialOptions) error {
 }
 
 // readLoop reads frames from the connection and dispatches them.
+// It exits when the connection is closed or on read error, running
+// closeWaiters to notify all pending callers.
 func (c *conn) readLoop(ctx context.Context) {
-	defer close(c.done)
+	defer func() {
+		c.closeWaiters(fmt.Errorf("connection closed"))
+		close(c.done)
+	}()
+
 	for {
+		hdr, body, err := c.reader.ReadFrame()
+		if err != nil {
+			return
+		}
+
+		// Check if we've been cancelled (conn.close was called).
 		select {
 		case <-ctx.Done():
-			c.closeWaiters(fmt.Errorf("connection closed"))
 			return
 		default:
 		}
 
-		hdr, body, err := c.reader.ReadFrame()
-		if err != nil {
-			c.closeWaiters(fmt.Errorf("read error: %w", err))
-			return
-		}
-
 		switch hdr.Opcode {
 		case fibp.OpcodePing:
-			// Respond with Pong using same request ID.
 			_ = c.writer.WriteFrame(fibp.OpcodePong, hdr.RequestID, nil)
 
 		case fibp.OpcodeDelivery:
-			// Route to delivery subscriber.
 			c.mu.Lock()
 			ch, ok := c.delivery[hdr.RequestID]
 			c.mu.Unlock()
@@ -176,34 +181,33 @@ func (c *conn) readLoop(ctx context.Context) {
 				}
 			}
 
-		case fibp.OpcodeConsumeOk:
-			// Route to the waiter for the consume request.
-			c.mu.Lock()
-			ch, ok := c.waiters[hdr.RequestID]
-			c.mu.Unlock()
-			if ok {
-				ch <- frameResult{header: hdr, body: body}
-			}
-
 		default:
-			// Route to request waiter.
+			// Route to request waiter (ConsumeOk, EnqueueResult, etc.)
 			c.mu.Lock()
 			ch, ok := c.waiters[hdr.RequestID]
 			c.mu.Unlock()
 			if ok {
-				ch <- frameResult{header: hdr, body: body}
+				select {
+				case ch <- frameResult{header: hdr, body: body}:
+				default:
+					// Channel full — drop frame (shouldn't happen with buffered channels).
+				}
 			}
 		}
 	}
 }
 
 // closeWaiters notifies all pending waiters of an error and closes delivery channels.
+// Uses non-blocking sends to avoid deadlocking if a waiter channel is full.
 func (c *conn) closeWaiters(err error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.closed = true
 	for id, ch := range c.waiters {
-		ch <- frameResult{err: err}
+		select {
+		case ch <- frameResult{err: err}:
+		default:
+		}
 		delete(c.waiters, id)
 	}
 	for id, ch := range c.delivery {
@@ -240,7 +244,6 @@ func (c *conn) request(ctx context.Context, opcode fibp.Opcode, body []byte) (fi
 		if res.err != nil {
 			return fibp.FrameHeader{}, nil, res.err
 		}
-		// Check for Error frame response.
 		if res.header.Opcode == fibp.OpcodeError {
 			errResp, _ := fibp.DecodeError(res.body)
 			return res.header, res.body, errorCodeToErr(errResp.Code, errResp.Message, errResp.Metadata)
@@ -284,7 +287,6 @@ func (c *conn) subscribe(ctx context.Context, queue string) (uint32, string, <-c
 		return 0, "", nil, fmt.Errorf("write consume: %w", err)
 	}
 
-	// Wait for ConsumeOk or Error.
 	select {
 	case res := <-waitCh:
 		c.mu.Lock()
@@ -323,13 +325,13 @@ func (c *conn) subscribe(ctx context.Context, queue string) (uint32, string, <-c
 }
 
 // cancelConsume sends a CancelConsume frame and unregisters the delivery channel.
+// The channel is NOT closed here — the readLoop's closeWaiters or the Consume
+// goroutine handles that. This avoids a race where readLoop sends to a channel
+// that cancelConsume just closed.
 func (c *conn) cancelConsume(reqID uint32) {
 	_ = c.writer.WriteFrame(fibp.OpcodeCancelConsume, reqID, nil)
 	c.mu.Lock()
-	if ch, ok := c.delivery[reqID]; ok {
-		close(ch)
-		delete(c.delivery, reqID)
-	}
+	delete(c.delivery, reqID)
 	c.mu.Unlock()
 }
 
