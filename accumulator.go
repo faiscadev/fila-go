@@ -6,11 +6,11 @@ import (
 	"sync"
 	"time"
 
-	filav1 "github.com/faisca/fila-go/filav1"
+	"github.com/faisca/fila-go/fibp"
 )
 
 // maxAutoBatchSize caps the number of items drained in a single auto-mode
-// batch to avoid exceeding gRPC's default 4 MB max message size.
+// batch to avoid exceeding the maximum frame size.
 const maxAutoBatchSize = 1000
 
 // AccumulatorMode controls how Enqueue() accumulates messages internally.
@@ -41,7 +41,7 @@ type AccumulatorModeLinger struct {
 func (AccumulatorModeLinger) isAccumulatorMode() {}
 
 // AccumulatorModeDisabled disables accumulation entirely. Each Enqueue() call
-// makes a direct gRPC RPC.
+// makes a direct request.
 type AccumulatorModeDisabled struct{}
 
 func (AccumulatorModeDisabled) isAccumulatorMode() {}
@@ -74,7 +74,7 @@ type accumulatorResult struct {
 // accumulator manages the background goroutine that collects and flushes
 // enqueue requests according to the configured AccumulatorMode.
 type accumulator struct {
-	svc  filav1.FilaServiceClient
+	conn *conn
 	mode AccumulatorMode
 	ch   chan *accumulatorItem
 
@@ -82,9 +82,9 @@ type accumulator struct {
 	stopCh chan struct{}
 }
 
-func newAccumulator(svc filav1.FilaServiceClient, mode AccumulatorMode) *accumulator {
+func newAccumulator(c *conn, mode AccumulatorMode) *accumulator {
 	a := &accumulator{
-		svc:    svc,
+		conn:   c,
 		mode:   mode,
 		ch:     make(chan *accumulatorItem, 4096),
 		stopCh: make(chan struct{}),
@@ -106,12 +106,8 @@ func (a *accumulator) run() {
 	}
 }
 
-// runAuto implements the opportunistic accumulation algorithm:
-// block for first message, non-blocking drain of anything else waiting,
-// then flush concurrently.
 func (a *accumulator) runAuto() {
 	for {
-		// Block waiting for the first item (or stop signal).
 		var first *accumulatorItem
 		select {
 		case first = <-a.ch:
@@ -121,8 +117,6 @@ func (a *accumulator) runAuto() {
 
 		batch := []*accumulatorItem{first}
 
-		// Non-blocking drain of anything else already in the channel,
-		// capped at maxAutoBatchSize to avoid exceeding gRPC message limits.
 	drain:
 		for len(batch) < maxAutoBatchSize {
 			select {
@@ -133,7 +127,6 @@ func (a *accumulator) runAuto() {
 			}
 		}
 
-		// Flush concurrently so the accumulator can keep collecting.
 		a.wg.Add(1)
 		go func(items []*accumulatorItem) {
 			defer a.wg.Done()
@@ -142,7 +135,6 @@ func (a *accumulator) runAuto() {
 	}
 }
 
-// runLinger implements timer-based forced accumulation.
 func (a *accumulator) runLinger(m AccumulatorModeLinger) {
 	lingerDuration := time.Duration(m.LingerMs) * time.Millisecond
 	maxSize := m.MaxSize
@@ -151,7 +143,6 @@ func (a *accumulator) runLinger(m AccumulatorModeLinger) {
 	}
 
 	for {
-		// Block waiting for the first item.
 		var first *accumulatorItem
 		select {
 		case first = <-a.ch:
@@ -171,7 +162,6 @@ func (a *accumulator) runLinger(m AccumulatorModeLinger) {
 				break collect
 			case <-a.stopCh:
 				timer.Stop()
-				// Flush what we have before stopping.
 				a.flush(batch)
 				return
 			}
@@ -186,44 +176,47 @@ func (a *accumulator) runLinger(m AccumulatorModeLinger) {
 	}
 }
 
-// flush sends accumulated enqueue requests to the server using the
-// unified Enqueue RPC (which accepts repeated messages).
 func (a *accumulator) flush(items []*accumulatorItem) {
-	msgs := make([]*filav1.EnqueueMessage, len(items))
+	msgs := make([]fibp.EnqueueMessageReq, len(items))
 	for i, item := range items {
-		msgs[i] = &filav1.EnqueueMessage{
+		msgs[i] = fibp.EnqueueMessageReq{
 			Queue:   item.msg.Queue,
 			Headers: item.msg.Headers,
 			Payload: item.msg.Payload,
 		}
 	}
 
-	// Use the first item's context for the RPC. If any individual
-	// context is already cancelled the caller will see it through their
-	// done channel timeout.
-	resp, err := a.svc.Enqueue(items[0].ctx, &filav1.EnqueueRequest{
-		Messages: msgs,
-	})
-
+	body, err := fibp.EncodeEnqueue(msgs)
 	if err != nil {
-		mappedErr := mapEnqueueError(err)
 		for _, item := range items {
-			item.done <- accumulatorResult{err: mappedErr}
+			item.done <- accumulatorResult{err: fmt.Errorf("encode enqueue: %w", err)}
 		}
 		return
 	}
 
-	results := resp.GetResults()
+	_, respBody, err := a.conn.request(items[0].ctx, fibp.OpcodeEnqueue, body)
+	if err != nil {
+		for _, item := range items {
+			item.done <- accumulatorResult{err: err}
+		}
+		return
+	}
+
+	results, err := fibp.DecodeEnqueueResult(respBody)
+	if err != nil {
+		for _, item := range items {
+			item.done <- accumulatorResult{err: fmt.Errorf("decode enqueue result: %w", err)}
+		}
+		return
+	}
+
 	for i, item := range items {
 		if i < len(results) {
 			r := results[i]
-			switch v := r.Result.(type) {
-			case *filav1.EnqueueResult_MessageId:
-				item.done <- accumulatorResult{messageID: v.MessageId}
-			case *filav1.EnqueueResult_Error:
-				item.done <- accumulatorResult{err: enqueueErrorToItemError(v.Error)}
-			default:
-				item.done <- accumulatorResult{err: &ItemError{Message: "unknown result type"}}
+			if r.ErrorCode != fibp.ErrorOk {
+				item.done <- accumulatorResult{err: errorCodeToItemError(r.ErrorCode)}
+			} else {
+				item.done <- accumulatorResult{messageID: r.MessageID}
 			}
 		} else {
 			item.done <- accumulatorResult{err: fmt.Errorf("enqueue: server returned fewer results than messages sent")}
@@ -231,7 +224,6 @@ func (a *accumulator) flush(items []*accumulatorItem) {
 	}
 }
 
-// submit sends a message to the accumulator and waits for the result.
 func (a *accumulator) submit(ctx context.Context, msg EnqueueMessage) (string, error) {
 	item := &accumulatorItem{
 		ctx:  ctx,
@@ -253,15 +245,11 @@ func (a *accumulator) submit(ctx context.Context, msg EnqueueMessage) (string, e
 	}
 }
 
-// drain flushes any pending messages and waits for all in-flight flushes
-// to complete.
 func (a *accumulator) drain() {
 	close(a.stopCh)
-	// Drain any remaining items in the channel.
 	for {
 		select {
 		case item := <-a.ch:
-			// Flush single items directly during drain.
 			a.flush([]*accumulatorItem{item})
 		default:
 			a.wg.Wait()

@@ -4,66 +4,73 @@ import (
 	"context"
 	"fmt"
 
-	filav1 "github.com/faisca/fila-go/filav1"
+	"github.com/faisca/fila-go/fibp"
 )
 
 // Ack acknowledges a successfully processed message.
 //
 // The message is permanently removed from the queue.
 func (c *Client) Ack(ctx context.Context, queue string, msgID string) error {
-	resp, err := c.svc.Ack(ctx, &filav1.AckRequest{
-		Messages: []*filav1.AckMessage{
-			{
-				Queue:     queue,
-				MessageId: msgID,
-			},
-		},
+	results, err := c.ackRaw(ctx, []fibp.AckItem{
+		{Queue: queue, MessageID: msgID},
 	})
 	if err != nil {
-		return mapAckError(err)
+		return err
 	}
-	if len(resp.Results) == 0 {
+	if len(results) == 0 {
 		return fmt.Errorf("ack: server returned no results")
 	}
-	return parseAckResult(resp.Results[0])
+	if results[0].ErrorCode != fibp.ErrorOk {
+		return errorCodeToItemError(results[0].ErrorCode)
+	}
+	return nil
 }
 
-// parseAckResult extracts success or error from a single AckResult.
-func parseAckResult(r *filav1.AckResult) error {
-	switch v := r.Result.(type) {
-	case *filav1.AckResult_Success:
-		return nil
-	case *filav1.AckResult_Error:
-		return ackErrorToItemError(v.Error)
-	default:
-		return fmt.Errorf("ack: unknown result type")
+// AckMany acknowledges multiple messages in a single request.
+func (c *Client) AckMany(ctx context.Context, items []AckItem) ([]AckManyResult, error) {
+	if len(items) == 0 {
+		return nil, nil
 	}
+	fibpItems := make([]fibp.AckItem, len(items))
+	for i, item := range items {
+		fibpItems[i] = fibp.AckItem{Queue: item.Queue, MessageID: item.MessageID}
+	}
+	results, err := c.ackRaw(ctx, fibpItems)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]AckManyResult, len(items))
+	for i := range items {
+		if i >= len(results) {
+			out[i] = AckManyResult{Err: fmt.Errorf("ack: server returned fewer results")}
+			continue
+		}
+		if results[i].ErrorCode != fibp.ErrorOk {
+			out[i] = AckManyResult{Err: errorCodeToItemError(results[i].ErrorCode)}
+		}
+	}
+	return out, nil
 }
 
-func ackErrorToItemError(e *filav1.AckError) *ItemError {
-	if e == nil {
-		return &ItemError{Message: "unknown error"}
+func (c *Client) ackRaw(ctx context.Context, items []fibp.AckItem) ([]fibp.AckResultItem, error) {
+	body, err := fibp.EncodeAck(items)
+	if err != nil {
+		return nil, fmt.Errorf("encode ack: %w", err)
 	}
-	ie := &ItemError{
-		Code:    ackErrorCodeString(e.Code),
-		Message: e.Message,
+	_, respBody, err := c.conn.request(ctx, fibp.OpcodeAck, body)
+	if err != nil {
+		return nil, err
 	}
-	switch e.Code {
-	case filav1.AckErrorCode_ACK_ERROR_CODE_MESSAGE_NOT_FOUND:
-		ie.cause = ErrMessageNotFound
-	}
-	return ie
+	return fibp.DecodeAckResult(respBody)
 }
 
-func ackErrorCodeString(code filav1.AckErrorCode) string {
-	switch code {
-	case filav1.AckErrorCode_ACK_ERROR_CODE_MESSAGE_NOT_FOUND:
-		return "message_not_found"
-	case filav1.AckErrorCode_ACK_ERROR_CODE_STORAGE:
-		return "storage"
-	case filav1.AckErrorCode_ACK_ERROR_CODE_PERMISSION_DENIED:
-		return "permission_denied"
-	default:
-		return "unspecified"
-	}
+// AckItem is a single item for AckMany.
+type AckItem struct {
+	Queue     string
+	MessageID string
+}
+
+// AckManyResult holds the result of a single ack in an AckMany call.
+type AckManyResult struct {
+	Err error
 }

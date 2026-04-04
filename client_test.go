@@ -1,293 +1,568 @@
-package fila_test
+package fila
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
-	"os"
-	"os/exec"
-	"path/filepath"
+	"sync"
 	"testing"
 	"time"
 
-	fila "github.com/faisca/fila-go"
-	filav1 "github.com/faisca/fila-go/filav1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
+	"github.com/faisca/fila-go/fibp"
 )
 
-// testServer manages a fila-server subprocess for integration tests.
-type testServer struct {
-	cmd     *exec.Cmd
-	addr    string
-	dataDir string
+// mockServer is a test helper that speaks the FIBP server side over a net.Conn pair.
+type mockServer struct {
+	listener net.Listener
+	addr     string
+	handler  func(fr *fibp.FrameReader, fw *fibp.FrameWriter)
+	wg       sync.WaitGroup
 }
 
-func findServerBinary() string {
-	// Check FILA_SERVER_BIN env var first.
-	if bin := os.Getenv("FILA_SERVER_BIN"); bin != "" {
-		return bin
-	}
-	// Fall back to relative path from fila-go to fila repo.
-	return filepath.Join("..", "fila", "target", "release", "fila-server")
-}
-
-func startTestServer(t *testing.T) *testServer {
+func newMockServer(t *testing.T, handler func(fr *fibp.FrameReader, fw *fibp.FrameWriter)) *mockServer {
 	t.Helper()
-
-	bin := findServerBinary()
-	if _, err := os.Stat(bin); err != nil {
-		t.Skipf("fila-server binary not found at %s: %v", bin, err)
-	}
-	// Resolve to absolute path since cmd.Dir changes the working directory.
-	absBin, absErr := filepath.Abs(bin)
-	if absErr != nil {
-		t.Fatalf("failed to resolve absolute path for binary: %v", absErr)
-	}
-	bin = absBin
-
-	// Find a free port.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
-		t.Fatalf("failed to find free port: %v", err)
+		t.Fatal(err)
 	}
-	port := listener.Addr().(*net.TCPAddr).Port
-	listener.Close()
-
-	addr := fmt.Sprintf("127.0.0.1:%d", port)
-
-	// Create temp data dir.
-	dataDir, err := os.MkdirTemp("", "fila-test-*")
-	if err != nil {
-		t.Fatalf("failed to create temp dir: %v", err)
+	s := &mockServer{
+		listener: l,
+		addr:     l.Addr().String(),
+		handler:  handler,
 	}
+	s.wg.Add(1)
+	go s.accept()
+	return s
+}
 
-	// Write a fila.toml config with the test listen address.
-	configPath := filepath.Join(dataDir, "fila.toml")
-	configContent := fmt.Sprintf("[server]\nlisten_addr = %q\n", addr)
-	if err := os.WriteFile(configPath, []byte(configContent), 0644); err != nil {
-		os.RemoveAll(dataDir)
-		t.Fatalf("failed to write fila.toml: %v", err)
-	}
-
-	cmd := exec.Command(bin)
-	cmd.Dir = dataDir
-	cmd.Env = append(os.Environ(), "FILA_DATA_DIR="+filepath.Join(dataDir, "db"))
-	cmd.Stdout = os.Stderr
-	cmd.Stderr = os.Stderr
-
-	if err := cmd.Start(); err != nil {
-		os.RemoveAll(dataDir)
-		t.Fatalf("failed to start fila-server: %v", err)
-	}
-
-	ts := &testServer{
-		cmd:     cmd,
-		addr:    addr,
-		dataDir: dataDir,
-	}
-
-	// Wait for server to be ready by polling the gRPC endpoint.
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
-	defer cancel()
-
+func (s *mockServer) accept() {
+	defer s.wg.Done()
 	for {
-		conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
-		if err == nil {
-			// Try a lightweight RPC to verify the server is responding.
-			adminClient := filav1.NewFilaAdminClient(conn)
-			_, listErr := adminClient.ListQueues(ctx, &filav1.ListQueuesRequest{})
-			conn.Close()
-			if listErr == nil {
-				break
+		conn, err := s.listener.Accept()
+		if err != nil {
+			return
+		}
+		s.wg.Add(1)
+		go func() {
+			defer s.wg.Done()
+			defer conn.Close()
+			fr := fibp.NewFrameReader(conn, fibp.DefaultMaxFrameSize)
+			fw := fibp.NewFrameWriter(conn, fibp.DefaultMaxFrameSize)
+
+			// Handle handshake.
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode != fibp.OpcodeHandshake {
+				return
+			}
+
+			// Send HandshakeOk.
+			w := fibp.NewWriter(32)
+			w.WriteU16(fibp.ProtocolVersion)
+			w.WriteU64(1) // nodeID
+			w.WriteU32(0) // default max frame
+			_ = fw.WriteFrame(fibp.OpcodeHandshakeOk, 0, w.Bytes())
+
+			s.handler(fr, fw)
+		}()
+	}
+}
+
+func (s *mockServer) close() {
+	s.listener.Close()
+	s.wg.Wait()
+}
+
+func TestDialAndClose(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		// Just accept and wait for disconnect.
+		for {
+			_, _, err := fr.ReadFrame()
+			if err != nil {
+				return
 			}
 		}
+	})
+	defer s.close()
 
-		select {
-		case <-ctx.Done():
-			ts.stop()
-			t.Fatalf("fila-server did not become ready within 10s")
-		case <-time.After(50 * time.Millisecond):
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := c.Close(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestEnqueueDirect(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode == fibp.OpcodeEnqueue {
+				w := fibp.NewWriter(32)
+				w.WriteU32(1) // result_count
+				w.WriteU8(0x00)
+				_ = w.WriteString("msg-uuid-1")
+				_ = fw.WriteFrame(fibp.OpcodeEnqueueResult, hdr.RequestID, w.Bytes())
+			}
 		}
-	}
-
-	t.Cleanup(func() {
-		ts.stop()
 	})
+	defer s.close()
 
-	return ts
-}
-
-func (ts *testServer) stop() {
-	if ts.cmd.Process != nil {
-		_ = ts.cmd.Process.Kill()
-		_ = ts.cmd.Wait()
-	}
-	os.RemoveAll(ts.dataDir)
-}
-
-// createQueue creates a queue on the test server using the admin gRPC client.
-func createQueue(t *testing.T, addr, name string) {
-	t.Helper()
-	conn, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
 	if err != nil {
-		t.Fatalf("failed to connect for admin: %v", err)
+		t.Fatal(err)
 	}
-	defer conn.Close()
+	defer c.Close()
 
-	adminClient := filav1.NewFilaAdminClient(conn)
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	_, err = adminClient.CreateQueue(ctx, &filav1.CreateQueueRequest{
-		Name:   name,
-		Config: &filav1.QueueConfig{},
-	})
+	msgID, err := c.Enqueue(ctx, "test-queue", map[string]string{"k": "v"}, []byte("hello"))
 	if err != nil {
-		t.Fatalf("failed to create queue %q: %v", name, err)
+		t.Fatal(err)
+	}
+	if msgID != "msg-uuid-1" {
+		t.Fatalf("expected msg-uuid-1, got %s", msgID)
 	}
 }
 
-func TestEnqueueConsumeAck(t *testing.T) {
-	ts := startTestServer(t)
-	queueName := "test-enqueue-consume-ack"
-	createQueue(t, ts.addr, queueName)
+func TestEnqueueWithAccumulator(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, body, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode == fibp.OpcodeEnqueue {
+				r := fibp.NewReader(body)
+				count, _ := r.ReadU32()
+				w := fibp.NewWriter(int(count) * 20)
+				w.WriteU32(count)
+				for i := uint32(0); i < count; i++ {
+					w.WriteU8(0x00)
+					_ = w.WriteString("id-" + string(rune('a'+i)))
+				}
+				_ = fw.WriteFrame(fibp.OpcodeEnqueueResult, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
 
-	client, err := fila.Dial(ts.addr)
+	c, err := Dial(s.addr) // Default accumulator
 	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
+		t.Fatal(err)
 	}
-	defer client.Close()
+	defer c.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// Enqueue a message.
-	headers := map[string]string{"tenant": "acme"}
-	payload := []byte("hello world")
-	msgID, err := client.Enqueue(ctx, queueName, headers, payload)
+	msgID, err := c.Enqueue(ctx, "q", nil, []byte("msg"))
 	if err != nil {
-		t.Fatalf("enqueue failed: %v", err)
+		t.Fatal(err)
 	}
 	if msgID == "" {
 		t.Fatal("expected non-empty message ID")
 	}
+}
 
-	// Consume the message.
-	ch, err := client.Consume(ctx, queueName)
+func TestEnqueueMany(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode == fibp.OpcodeEnqueue {
+				w := fibp.NewWriter(64)
+				w.WriteU32(2)
+				w.WriteU8(0x00) // success
+				_ = w.WriteString("id-1")
+				w.WriteU8(0x01) // QueueNotFound
+				_ = w.WriteString("")
+				_ = fw.WriteFrame(fibp.OpcodeEnqueueResult, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
+
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
 	if err != nil {
-		t.Fatalf("consume failed: %v", err)
+		t.Fatal(err)
 	}
+	defer c.Close()
 
-	select {
-	case msg := <-ch:
-		if msg == nil {
-			t.Fatal("channel closed without receiving a message")
-		}
-		if msg.ID != msgID {
-			t.Errorf("expected message ID %q, got %q", msgID, msg.ID)
-		}
-		if msg.Headers["tenant"] != "acme" {
-			t.Errorf("expected header tenant=acme, got %v", msg.Headers)
-		}
-		if string(msg.Payload) != "hello world" {
-			t.Errorf("expected payload 'hello world', got %q", string(msg.Payload))
-		}
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
 
-		// Ack the message.
-		if err := client.Ack(ctx, queueName, msg.ID); err != nil {
-			t.Fatalf("ack failed: %v", err)
-		}
-	case <-ctx.Done():
-		t.Fatal("timeout waiting for message")
+	results, err := c.EnqueueMany(ctx, []EnqueueMessage{
+		{Queue: "q1", Payload: []byte("a")},
+		{Queue: "bad-q", Payload: []byte("b")},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("expected 2 results, got %d", len(results))
+	}
+	if results[0].MessageID != "id-1" {
+		t.Fatalf("expected id-1, got %s", results[0].MessageID)
+	}
+	if results[1].Err == nil {
+		t.Fatal("expected error for second message")
+	}
+	if !errors.Is(results[1].Err, ErrQueueNotFound) {
+		t.Fatalf("expected ErrQueueNotFound, got %v", results[1].Err)
 	}
 }
 
-func TestEnqueueConsumeNackRedeliver(t *testing.T) {
-	ts := startTestServer(t)
-	queueName := "test-nack-redeliver"
-	createQueue(t, ts.addr, queueName)
+func TestAck(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode == fibp.OpcodeAck {
+				w := fibp.NewWriter(16)
+				w.WriteU32(1)
+				w.WriteU8(0x00)
+				_ = fw.WriteFrame(fibp.OpcodeAckResult, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
 
-	client, err := fila.Dial(ts.addr)
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
 	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
+		t.Fatal(err)
 	}
-	defer client.Close()
+	defer c.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// Enqueue a message.
-	msgID, err := client.Enqueue(ctx, queueName, nil, []byte("retry-me"))
-	if err != nil {
-		t.Fatalf("enqueue failed: %v", err)
-	}
-
-	// Open a consume stream — nacked messages are redelivered on the same stream.
-	ch, err := client.Consume(ctx, queueName)
-	if err != nil {
-		t.Fatalf("consume failed: %v", err)
-	}
-
-	// First delivery.
-	select {
-	case msg := <-ch:
-		if msg == nil {
-			t.Fatal("channel closed without receiving a message")
-		}
-		if msg.ID != msgID {
-			t.Errorf("expected message ID %q, got %q", msgID, msg.ID)
-		}
-		if msg.AttemptCount != 0 {
-			t.Errorf("expected attempt count 0, got %d", msg.AttemptCount)
-		}
-
-		// Nack the message.
-		if err := client.Nack(ctx, queueName, msg.ID, "transient failure"); err != nil {
-			t.Fatalf("nack failed: %v", err)
-		}
-	case <-ctx.Done():
-		t.Fatal("timeout waiting for first delivery")
-	}
-
-	// Redelivery on the same stream.
-	select {
-	case msg := <-ch:
-		if msg == nil {
-			t.Fatal("channel closed without receiving redelivered message")
-		}
-		if msg.ID != msgID {
-			t.Errorf("expected redelivered message ID %q, got %q", msgID, msg.ID)
-		}
-		if msg.AttemptCount != 1 {
-			t.Errorf("expected attempt count 1, got %d", msg.AttemptCount)
-		}
-
-		// Ack to clean up.
-		_ = client.Ack(ctx, queueName, msg.ID)
-	case <-ctx.Done():
-		t.Fatal("timeout waiting for redelivered message")
+	if err := c.Ack(ctx, "q", "msg-1"); err != nil {
+		t.Fatal(err)
 	}
 }
 
-func TestEnqueueNonexistentQueue(t *testing.T) {
-	ts := startTestServer(t)
+func TestNack(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode == fibp.OpcodeNack {
+				w := fibp.NewWriter(16)
+				w.WriteU32(1)
+				w.WriteU8(0x00)
+				_ = fw.WriteFrame(fibp.OpcodeNackResult, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
 
-	client, err := fila.Dial(ts.addr)
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
 	if err != nil {
-		t.Fatalf("failed to dial: %v", err)
+		t.Fatal(err)
 	}
-	defer client.Close()
+	defer c.Close()
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	_, err = client.Enqueue(ctx, "does-not-exist", nil, []byte("test"))
+	if err := c.Nack(ctx, "q", "msg-1", "oops"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestConsume(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			switch hdr.Opcode {
+			case fibp.OpcodeConsume:
+				// Send ConsumeOk.
+				w := fibp.NewWriter(16)
+				_ = w.WriteString("consumer-1")
+				_ = fw.WriteFrame(fibp.OpcodeConsumeOk, hdr.RequestID, w.Bytes())
+
+				// Send a delivery.
+				dw := fibp.NewWriter(128)
+				dw.WriteU32(1)
+				_ = dw.WriteString("msg-1")
+				_ = dw.WriteString("test-q")
+				_ = dw.WriteStringMap(nil)
+				dw.WriteBytes([]byte("hello"))
+				_ = dw.WriteString("")   // fairness_key
+				dw.WriteU32(1)            // weight
+				_ = dw.WriteStringSlice(nil) // throttle_keys
+				dw.WriteU32(1)            // attempt_count
+				dw.WriteU64(1000)         // enqueued_at
+				dw.WriteU64(2000)         // leased_at
+				_ = fw.WriteFrame(fibp.OpcodeDelivery, hdr.RequestID, dw.Bytes())
+
+			case fibp.OpcodeCancelConsume:
+				return
+
+			case fibp.OpcodeAck:
+				w := fibp.NewWriter(16)
+				w.WriteU32(1)
+				w.WriteU8(0x00)
+				_ = fw.WriteFrame(fibp.OpcodeAckResult, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
+
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	ch, err := c.Consume(ctx, "test-q")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	msg := <-ch
+	if msg == nil {
+		t.Fatal("expected a message")
+	}
+	if msg.ID != "msg-1" {
+		t.Fatalf("expected msg-1, got %s", msg.ID)
+	}
+	if string(msg.Payload) != "hello" {
+		t.Fatalf("expected hello, got %s", string(msg.Payload))
+	}
+
+	cancel()
+}
+
+func TestErrorResponse(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode == fibp.OpcodeEnqueue {
+				w := fibp.NewWriter(32)
+				w.WriteU8(0x0A) // Unauthorized
+				_ = w.WriteString("invalid api key")
+				_ = w.WriteStringMap(nil)
+				_ = fw.WriteFrame(fibp.OpcodeError, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
+
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	_, err = c.Enqueue(ctx, "q", nil, []byte("msg"))
 	if err == nil {
-		t.Fatal("expected error for nonexistent queue")
+		t.Fatal("expected error")
 	}
-	if !errors.Is(err, fila.ErrQueueNotFound) {
-		t.Errorf("expected ErrQueueNotFound, got: %v", err)
+	if !errors.Is(err, ErrUnauthorized) {
+		t.Fatalf("expected ErrUnauthorized, got %v", err)
 	}
 }
+
+func TestNotLeaderRedirect(t *testing.T) {
+	// We test that NotLeader with leader hint causes a ProtocolError with LeaderAddr.
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode == fibp.OpcodeConsume {
+				w := fibp.NewWriter(64)
+				w.WriteU8(0x0C) // NotLeader
+				_ = w.WriteString("not the leader for this queue")
+				_ = w.WriteStringMap(map[string]string{"leader_addr": "other-host:5555"})
+				_ = fw.WriteFrame(fibp.OpcodeError, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
+
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	// The consume should fail because the leader redirect won't connect.
+	_, err = c.Consume(ctx, "q")
+	if err == nil {
+		t.Fatal("expected error from NotLeader redirect failure")
+	}
+}
+
+func TestTLSClientCertWithoutTLS(t *testing.T) {
+	_, err := Dial("localhost:0", WithTLSClientCert([]byte("cert"), []byte("key")))
+	if err == nil {
+		t.Fatal("expected error")
+	}
+}
+
+func TestAdminCreateDeleteQueue(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			switch hdr.Opcode {
+			case fibp.OpcodeCreateQueue:
+				w := fibp.NewWriter(32)
+				w.WriteU8(0x00)
+				_ = w.WriteString("q-id-1")
+				_ = fw.WriteFrame(fibp.OpcodeCreateQueueResult, hdr.RequestID, w.Bytes())
+			case fibp.OpcodeDeleteQueue:
+				w := fibp.NewWriter(8)
+				w.WriteU8(0x00)
+				_ = fw.WriteFrame(fibp.OpcodeDeleteQueueResult, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
+
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	qID, err := c.CreateQueue(ctx, "myqueue", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if qID != "q-id-1" {
+		t.Fatalf("expected q-id-1, got %s", qID)
+	}
+
+	if err := c.DeleteQueue(ctx, "myqueue"); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAdminListQueues(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode == fibp.OpcodeListQueues {
+				w := fibp.NewWriter(64)
+				w.WriteU8(0x00)
+				w.WriteU32(0) // cluster_node_count
+				w.WriteU16(1) // queue_count
+				_ = w.WriteString("q1")
+				w.WriteU64(10) // depth
+				w.WriteU64(2)  // in_flight
+				w.WriteU32(1)  // active_consumers
+				w.WriteU64(0)  // leader_node_id
+				_ = fw.WriteFrame(fibp.OpcodeListQueuesResult, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
+
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	result, err := c.ListQueues(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(result.Queues) != 1 {
+		t.Fatalf("expected 1 queue, got %d", len(result.Queues))
+	}
+	if result.Queues[0].Name != "q1" {
+		t.Fatalf("expected q1, got %s", result.Queues[0].Name)
+	}
+	if result.Queues[0].Depth != 10 {
+		t.Fatalf("expected depth 10, got %d", result.Queues[0].Depth)
+	}
+}
+
+func TestAuthCreateApiKey(t *testing.T) {
+	s := newMockServer(t, func(fr *fibp.FrameReader, fw *fibp.FrameWriter) {
+		for {
+			hdr, _, err := fr.ReadFrame()
+			if err != nil {
+				return
+			}
+			if hdr.Opcode == fibp.OpcodeCreateApiKey {
+				w := fibp.NewWriter(64)
+				w.WriteU8(0x00)
+				_ = w.WriteString("key-id-1")
+				_ = w.WriteString("raw-key-abc")
+				w.WriteBool(true)
+				_ = fw.WriteFrame(fibp.OpcodeCreateApiKeyResult, hdr.RequestID, w.Bytes())
+			}
+		}
+	})
+	defer s.close()
+
+	c, err := Dial(s.addr, WithAccumulatorMode(AccumulatorModeDisabled{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer c.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+
+	info, err := c.CreateApiKey(ctx, "test-key", time.Time{}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.KeyID != "key-id-1" {
+		t.Fatalf("expected key-id-1, got %s", info.KeyID)
+	}
+	if info.Key != "raw-key-abc" {
+		t.Fatalf("expected raw-key-abc, got %s", info.Key)
+	}
+	if !info.IsSuperadmin {
+		t.Fatal("expected superadmin")
+	}
+}
+
