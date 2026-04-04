@@ -6,40 +6,36 @@ import (
 	"crypto/x509"
 	"errors"
 	"fmt"
-
-	filav1 "github.com/faisca/fila-go/filav1"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
-	"google.golang.org/grpc/credentials/insecure"
+	"net"
 )
 
 // Client is an idiomatic Go client for the Fila message broker.
 //
-// It wraps the hot-path gRPC operations: Enqueue, Consume, Ack, Nack.
+// It wraps all FIBP operations: Enqueue, Consume, Ack, Nack, and admin ops.
 // The client is safe for concurrent use.
+//
+// By default, Enqueue() routes through an internal accumulator that uses
+// opportunistic accumulation (AccumulatorModeAuto). Use
+// WithAccumulatorMode() to change the accumulation strategy.
 type Client struct {
-	conn *grpc.ClientConn
-	svc  filav1.FilaServiceClient
+	conn        *conn
+	addr        string
+	opts        []DialOption
+	accumulator *accumulator
 }
 
 // DialOption configures how the client connects to the broker.
 type DialOption func(*dialOptions)
 
 type dialOptions struct {
-	grpcOpts    []grpc.DialOption
-	caCertPEM   []byte
-	clientCert  []byte
-	clientKey   []byte
-	apiKey      string
-	hasTLS      bool
-	hasAPIKey   bool
-}
-
-// WithGRPCDialOption adds a raw gRPC dial option for advanced configuration.
-func WithGRPCDialOption(opt grpc.DialOption) DialOption {
-	return func(o *dialOptions) {
-		o.grpcOpts = append(o.grpcOpts, opt)
-	}
+	caCertPEM       []byte
+	clientCert      []byte
+	clientKey       []byte
+	apiKey          string
+	accumulatorMode AccumulatorMode
+	hasTLS          bool
+	hasAPIKey       bool
+	hasAccumulator  bool
 }
 
 // WithTLS enables TLS using the operating system's default root CA pool.
@@ -79,8 +75,8 @@ func WithTLSClientCert(certPEM, keyPEM []byte) DialOption {
 
 // WithAPIKey configures API key authentication.
 //
-// When set, every outgoing RPC includes an "authorization: Bearer <key>"
-// metadata header. The server validates this key and applies per-key ACLs.
+// When set, the API key is sent in the FIBP handshake frame. The server
+// validates this key and applies per-key ACLs.
 func WithAPIKey(key string) DialOption {
 	return func(o *dialOptions) {
 		o.apiKey = key
@@ -88,99 +84,93 @@ func WithAPIKey(key string) DialOption {
 	}
 }
 
-// apiKeyCredentials implements grpc.PerRPCCredentials to attach an API key
-// as a Bearer token on every outgoing RPC.
-type apiKeyCredentials struct {
-	key string
-	// requireTransportSecurity is true when TLS is configured.
-	requireTransportSecurity bool
-}
-
-func (c *apiKeyCredentials) GetRequestMetadata(_ context.Context, _ ...string) (map[string]string, error) {
-	return map[string]string{
-		"authorization": "Bearer " + c.key,
-	}, nil
-}
-
-func (c *apiKeyCredentials) RequireTransportSecurity() bool {
-	return c.requireTransportSecurity
+// WithAccumulatorMode sets the accumulation strategy for Enqueue() calls.
+//
+// The default is AccumulatorModeAuto{} (opportunistic accumulation). Use
+// AccumulatorModeLinger{} for timer-based accumulation, or
+// AccumulatorModeDisabled{} to send each Enqueue() as a direct call.
+func WithAccumulatorMode(mode AccumulatorMode) DialOption {
+	return func(o *dialOptions) {
+		o.accumulatorMode = mode
+		o.hasAccumulator = true
+	}
 }
 
 // Dial connects to a Fila broker at the given address.
 //
 // The address should be in the form "host:port" (e.g., "localhost:5555").
-// Connection is established lazily on the first RPC call. Use context
-// timeouts on individual operations to control deadlines.
+// The connection is established immediately, including the FIBP handshake.
+//
+// By default, a background accumulator goroutine is started with
+// AccumulatorModeAuto. Call Close() to drain pending messages and shut
+// down the accumulator cleanly.
 func Dial(addr string, opts ...DialOption) (*Client, error) {
 	var do dialOptions
 	for _, opt := range opts {
 		opt(&do)
 	}
 
-	// Validate: WithTLSClientCert requires WithTLS or WithTLSCACert.
 	if !do.hasTLS && (do.clientCert != nil || do.clientKey != nil) {
 		return nil, errors.New("WithTLSClientCert requires WithTLS or WithTLSCACert: client certificate has no effect without TLS")
 	}
 
-	var grpcOpts []grpc.DialOption
-
-	if do.hasTLS {
-		tlsConfig, err := buildTLSConfig(do.caCertPEM, do.clientCert, do.clientKey)
-		if err != nil {
-			return nil, fmt.Errorf("tls config: %w", err)
-		}
-		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)))
-	} else {
-		grpcOpts = append(grpcOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
-	}
-
-	if do.hasAPIKey {
-		grpcOpts = append(grpcOpts, grpc.WithPerRPCCredentials(&apiKeyCredentials{
-			key:                      do.apiKey,
-			requireTransportSecurity: do.hasTLS,
-		}))
-	}
-
-	grpcOpts = append(grpcOpts, do.grpcOpts...)
-
-	conn, err := grpc.NewClient(addr, grpcOpts...)
+	c, err := dialConn(context.Background(), addr, &do)
 	if err != nil {
 		return nil, err
 	}
 
-	return &Client{
-		conn: conn,
-		svc:  filav1.NewFilaServiceClient(conn),
-	}, nil
+	accMode := do.accumulatorMode
+	if !do.hasAccumulator {
+		accMode = AccumulatorModeAuto{}
+	}
+
+	client := &Client{
+		conn: c,
+		addr: addr,
+		opts: opts,
+	}
+
+	disabled := false
+	switch accMode.(type) {
+	case AccumulatorModeDisabled, *AccumulatorModeDisabled:
+		disabled = true
+	}
+	if !disabled {
+		client.accumulator = newAccumulator(c, accMode)
+	}
+
+	return client, nil
 }
 
-// Close closes the underlying gRPC connection.
+// Close drains any pending accumulated messages and closes the underlying
+// connection.
 func (c *Client) Close() error {
-	return c.conn.Close()
+	if c.accumulator != nil {
+		c.accumulator.drain()
+	}
+	return c.conn.close()
 }
 
-// buildTLSConfig creates a *tls.Config from PEM-encoded certificates.
-// When caCertPEM is nil, the system's default root CA pool is used.
-func buildTLSConfig(caCertPEM, clientCertPEM, clientKeyPEM []byte) (*tls.Config, error) {
+// buildTLSConfig creates a *tls.Config from the dial options.
+func buildTLSConfig(opts *dialOptions) (*tls.Config, error) {
 	tlsConfig := &tls.Config{
 		MinVersion: tls.VersionTLS12,
 	}
 
-	if caCertPEM != nil {
+	if opts.caCertPEM != nil {
 		certPool := x509.NewCertPool()
-		if !certPool.AppendCertsFromPEM(caCertPEM) {
+		if !certPool.AppendCertsFromPEM(opts.caCertPEM) {
 			return nil, errors.New("failed to parse CA certificate")
 		}
 		tlsConfig.RootCAs = certPool
 	}
 
-	// Reject partial mTLS config: both cert and key must be provided or neither.
-	if (clientCertPEM != nil) != (clientKeyPEM != nil) {
+	if (opts.clientCert != nil) != (opts.clientKey != nil) {
 		return nil, errors.New("both client certificate and key must be provided for mTLS")
 	}
 
-	if clientCertPEM != nil && clientKeyPEM != nil {
-		cert, err := tls.X509KeyPair(clientCertPEM, clientKeyPEM)
+	if opts.clientCert != nil && opts.clientKey != nil {
+		cert, err := tls.X509KeyPair(opts.clientCert, opts.clientKey)
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse client certificate: %w", err)
 		}
@@ -188,4 +178,18 @@ func buildTLSConfig(caCertPEM, clientCertPEM, clientKeyPEM []byte) (*tls.Config,
 	}
 
 	return tlsConfig, nil
+}
+
+// dialTLS connects with TLS wrapping.
+func dialTLS(ctx context.Context, dialer *net.Dialer, addr string, tlsConfig *tls.Config) (net.Conn, error) {
+	netConn, err := dialer.DialContext(ctx, "tcp", addr)
+	if err != nil {
+		return nil, err
+	}
+	tlsConn := tls.Client(netConn, tlsConfig)
+	if err := tlsConn.HandshakeContext(ctx); err != nil {
+		netConn.Close()
+		return nil, err
+	}
+	return tlsConn, nil
 }
